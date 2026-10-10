@@ -43,6 +43,12 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   forward each result the moment it exists rather than buffering a whole run.
 - Messages that embed a third-party exception must collapse it with `" ".join(str(exc).split())`
   — upstream errors (e.g. HF's `GatedRepoError`) are multi-line and bury the actionable hint.
+- A domain error maps to HTTP status in **one** `@app.exception_handler(...)` inside `create_app`,
+  never with a try/except in the route (see `AudioError` → `400 {"detail": ...}`). Routes raise.
+- Reject bad input, never silently repair it: `audio.py` won't resample or downmix, because a
+  quiet fix-up hides the upstream client bug (PRD R-5) instead of surfacing it.
+- Test fixtures are **generated, not checked in** (`tests/fakes.py::make_wav()`); keyword args
+  build the invalid variants. No binary files in the repo.
 
 ---
 
@@ -199,4 +205,37 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   - `inference_count` counts `generate()` calls actually made, so an `unplaced` on a failed
     call includes that call (matches the PRD's example: 2 at `product_interest`). On
     `depth_limit` the capped call is never issued.
+---
+
+## 2026-10-10 - US-006
+- Implemented WAV validation + decode and wired rejected audio to HTTP 400.
+- Files changed:
+  - `backend/callcompass/audio.py` (new: `decode_wav`, `DecodedAudio`, `AudioError`,
+    `SAMPLE_RATE`/`CHANNELS`/`SAMPLE_WIDTH_BYTES`/`MAX_BYTES`/`MIN_SECONDS`/`MAX_SECONDS`)
+  - `backend/callcompass/main.py` (app-wide `AudioError` exception handler → `400 {"detail": ...}`)
+  - `backend/tests/fakes.py` (added `make_wav()` fixture generator)
+  - `backend/tests/test_audio.py` (new: 15 tests — valid decode + 8 rejection cases + the 400 wiring)
+  - `backend/CLAUDE.md` (new "Audio decode" section)
+- Verified: `ruff check .` clean, `mypy callcompass` clean (7 files), `pytest` 65 passed.
+- **Learnings for future iterations:**
+  - Decode uses stdlib `wave` only — no audio codec dependency was added, and none is needed.
+    A non-WAV payload raises `wave.Error`/`EOFError`; both are caught and collapsed to one line.
+  - **Rate and channels are reported in a single message** so the PRD's exact example
+    (`"Audio must be 16000 Hz mono; received 44100 Hz stereo."`) is reproducible. Checking them
+    separately would make that message impossible to emit.
+  - Deliberate decision: `audio.py` **never resamples or downmixes**. Wrong rate is a 400, not
+    something to repair — silently fixing it would mask US-009's client pipeline bugs (PRD R-5).
+  - `np.frombuffer(...)` returns a **read-only** view; `.astype(np.float32)` copies, which is
+    what makes `DecodedAudio.samples` writable. Don't "optimise" that copy away.
+  - Rejection is raised, not returned: `create_app` registers one `@app.exception_handler(AudioError)`,
+    so US-007's `/api/analyze` just calls `decode_wav(await file.read())` and lets it propagate.
+    That satisfies "400 before the stream opens" with no try/except in the route.
+  - The handler is covered by a test that appends a throwaway `/test/decode` route to a real
+    `create_app(...)` instance. Once `/api/analyze` exists, US-007 should assert the 400 there
+    too; the throwaway route can then stay as the narrow handler test or be dropped.
+  - `make_wav(seconds, sample_rate=, channels=, sample_width=, freq=)` in `tests/fakes.py` builds
+    every variant, valid and invalid. US-007's integration test and US-009's cross-check should
+    use it rather than checking in a binary fixture.
+  - Boundary durations 0.3 s and 30.0 s are **inclusive** (tested). 30 s of 16 kHz 16-bit mono is
+    960 KB, comfortably under the 2 MB cap — the size limit only ever catches malformed bodies.
 ---

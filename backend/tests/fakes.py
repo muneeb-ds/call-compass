@@ -7,6 +7,9 @@ list of responses, one per `generate()` call, and records what it was asked.
 
 from __future__ import annotations
 
+import io
+import math
+import wave
 from typing import Any
 
 from callcompass.model import InferenceEngine, ToolCall, ToolSpec
@@ -53,3 +56,37 @@ def fake_engine(
 ) -> InferenceEngine:
     """An `InferenceEngine` wrapping a `FakeModel`, ready to hand to `create_app`."""
     return InferenceEngine(FakeModel(script), load_ms=load_ms, providers=["CPUExecutionProvider"])
+
+
+def make_wav(
+    seconds: float = 1.0,
+    *,
+    sample_rate: int = 16_000,
+    channels: int = 1,
+    sample_width: int = 2,
+    freq: float = 220.0,
+) -> bytes:
+    """A WAV fixture: a quiet sine tone, valid 16 kHz mono 16-bit PCM by default.
+
+    The keyword arguments exist so a test can build a deliberately *invalid* file
+    (wrong rate, stereo, 8-bit) without hand-assembling a RIFF header.
+    """
+    frames = int(seconds * sample_rate)
+    peak = float(2 ** (sample_width * 8 - 1) - 1) * 0.5
+    payload = bytearray()
+    for i in range(frames):
+        value = int(peak * math.sin(2 * math.pi * freq * i / sample_rate))
+        if sample_width == 1:
+            # 8-bit WAV is unsigned, centred on 128.
+            sample = bytes([128 + value])
+        else:
+            sample = value.to_bytes(sample_width, "little", signed=True)
+        payload += sample * channels
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(sample_width)
+        wav.setframerate(sample_rate)
+        wav.writeframes(bytes(payload))
+    return buffer.getvalue()

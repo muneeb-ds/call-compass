@@ -92,6 +92,26 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   round-trips a tool list through the real `neudecide.grammar.tool_parameters` to catch an
   upstream schema change. Update those assertions deliberately, not reflexively.
 
+## Audio decode (`callcompass/audio.py`)
+
+- The **only** module that knows the audio wire format. Pure — no model, network, or
+  filesystem. `decode_wav(bytes)` → `DecodedAudio(samples, sample_rate, duration_ms)`.
+- `samples` is `float32`, shape `(samples,)`, scaled into `[-1, 1)` — exactly what
+  `neudecide.generate()` wants for a float array. `duration_ms` is what US-007's
+  `started` event reports as `audio_duration_ms`.
+- It **never resamples or downmixes.** Fixing up bad audio would hide the client-side
+  pipeline bugs that are PRD risk R-5; a wrong rate is an error, not something to repair.
+- Checks run cheapest-first: empty → size → WAV container → rate/channels → width →
+  duration. Rate and channels are reported in **one** message so the PRD's example
+  (`"Audio must be 16000 Hz mono; received 44100 Hz stereo."`) is reproducible.
+- Rejections raise `AudioError` (a `ValueError`) with a single line naming the actual
+  value. `create_app` registers one app-wide handler turning it into
+  `400 {"detail": <message>}` — routes should let it propagate, not catch it.
+- Uses stdlib `wave`, so there is no audio codec dependency. A non-WAV payload surfaces
+  as `wave.Error`/`EOFError` and is collapsed into the one-line message.
+- `tests/fakes.py::make_wav()` generates fixtures (no checked-in binary): defaults are
+  valid, and keyword args build each invalid variant. Use it instead of hand-rolling RIFF.
+
 ## Traversal (`callcompass/traversal.py`)
 
 - `traverse(audio, tree, model, max_steps=MAX_DEPTH)` is a **generator**: it yields a `Step`

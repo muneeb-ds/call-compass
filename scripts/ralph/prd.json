@@ -110,7 +110,7 @@
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Decode shape must match what US-003 established about generate()'s expected audio input. A checked-in or test-generated fixture WAV lets the backend be tested without a browser - the PRD calls this out as mitigation for R-5."
     },
     {

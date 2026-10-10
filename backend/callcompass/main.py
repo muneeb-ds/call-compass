@@ -14,9 +14,11 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .audio import AudioError
 from .model import InferenceEngine, load_engine
 from .tree import Tree, default_config_path, load_tree
 
@@ -63,6 +65,15 @@ def create_app(
         yield
 
     app = FastAPI(title="CallCompass", version="0.1.0", lifespan=lifespan)
+
+    @app.exception_handler(AudioError)
+    async def audio_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Rejected audio is a 400 with the single-line reason as `detail`.
+
+        Registered app-wide so every route that decodes audio gets the same shape
+        without repeating a try/except (PRD: `{"detail": "Audio must be ..."}`).
+        """
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     @app.get("/api/health")
     async def health() -> HealthResponse:
