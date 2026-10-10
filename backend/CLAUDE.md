@@ -187,8 +187,11 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   `tests/test_frontend_timing.py` (`tests/timing_fixture.mjs`), which pins the UI's recording
   ceiling to `audio.MAX_SECONDS`, and by `tests/test_frontend_playback.py`
   (`tests/playback_fixture.mjs`), which stubs three DOM elements and asserts the bytes the
-  playback control serves are byte-identical to the upload. All three skip if `node` is
-  missing, so a green suite does not imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
+  playback control serves are byte-identical to the upload, and by
+  `tests/test_frontend_tree.py` (`tests/tree_fixture.mjs`), which runs the shipped tree
+  layout over the real `config/tree.json` **and over mutated copies of it**, so a layout
+  that stopped following the config fails here. All four skip if `node` is missing, so a
+  green suite does not imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
   one of those two tests** — that is the only place the two sides are checked against
   each other.
 

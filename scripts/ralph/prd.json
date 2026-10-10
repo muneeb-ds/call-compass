@@ -218,7 +218,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "No hardcoded positions - this is what makes PRD AC-10 (re-point the demo by editing JSON only) true. Verify the uneven-depth case renders sanely, since rec_graceful_exit sits at level 2 while its siblings' subtrees reach level 4."
     },
     {

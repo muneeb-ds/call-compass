@@ -7,6 +7,7 @@
 import { MicrophoneError, Recorder } from "./capture.js";
 import { Playback } from "./playback.js";
 import { RecordingTimer } from "./timer.js";
+import { TreeView } from "./tree.js";
 import { Waveform } from "./waveform.js";
 
 /** @param {string} text @param {"loading"|"ready"|"error"} state */
@@ -42,6 +43,38 @@ export async function checkHealth() {
   } catch (err) {
     setStatus(`Backend unreachable: ${err.message}`, "error");
     return null;
+  }
+}
+
+/**
+ * Fetches GET /api/tree and draws it, dimmed, in the center column.
+ *
+ * The drawing is derived from the config alone, so editing a label in
+ * `config/tree.json` and restarting the server is enough to change it.
+ *
+ * @returns {Promise<{view: TreeView, tree: object}|null>} null if the tree could not
+ *   be loaded, with the reason already on screen
+ */
+export async function loadTree() {
+  const message = document.getElementById("tree-message");
+  /** @param {string} text */
+  const fail = (text) => {
+    message.textContent = text;
+    message.hidden = false;
+    return null;
+  };
+  const view = new TreeView(
+    /** @type {SVGSVGElement} */ (document.getElementById("tree-canvas")),
+  );
+  try {
+    const response = await fetch("/api/tree");
+    if (!response.ok) return fail(`Could not load the tree: HTTP ${response.status}`);
+    const tree = await response.json();
+    view.render(tree);
+    message.hidden = true;
+    return { view, tree };
+  } catch (err) {
+    return fail(`Could not load the tree: ${err.message}`);
   }
 }
 
@@ -191,4 +224,5 @@ export function wireCapture() {
 }
 
 checkHealth();
+loadTree();
 wireCapture();

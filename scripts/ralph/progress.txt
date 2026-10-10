@@ -82,6 +82,15 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   node with a handful of stub objects, which is this repo's only JS test path.
 - A control with no data yet is **`disabled`, never `hidden`** — the Capture column must
   not change shape mid-demo as widgets appear.
+- The configured tree is a **DAG**: two options can share a `next`. De-duplicate when
+  walking it, and take the **longest** path from the root as a node's depth.
+- Visual state is a `data-state` attribute flipped on an existing element, never a
+  re-render and never a parallel CSS class (`idle` / visited / warning on `.tree-node`).
+- UI geometry is **derived from the data at render time** and asserted by running the
+  shipped JS under node against the real config *and a mutated copy of it* — a layout that
+  quietly stopped following `config/tree.json` must fail a test, not a demo.
+- No browser tool in this environment. For an SVG story, render the shipped layout to a
+  standalone `.svg`, rasterize with `qlmanage -t -s 1200 -o /tmp x.svg`, and Read the PNG.
 
 ---
 
@@ -516,4 +525,42 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
     used — the exact confusion playback exists to prevent.
   - US-016's Reset should call `playback.clear()` (already exposed on `wireCapture()`'s
     return) rather than re-querying the DOM or inventing its own teardown.
+---
+
+## 2026-10-10 - US-012
+- Implemented the static tree visualization: `GET /api/tree` is fetched on page load and
+  rendered as an inline SVG node graph, levels top to bottom, everything dimmed.
+- Files changed:
+  - `frontend/tree.js` (new): pure `layoutTree(tree)` / `wrapLabel` / `edgeKey`, plus
+    `TreeView(svg)` which draws nodes + bezier edges and exposes `node()`, `edge()`, `reset()`.
+  - `frontend/index.html` (tree slot is now `<svg id="tree-canvas">` + a `#tree-message`),
+    `frontend/styles.css` (`.tree-graph`, `.tree-node`, `.tree-box`, `.tree-edge` states),
+    `frontend/app.js` (new exported `loadTree()`, called at the bottom).
+  - `backend/tests/tree_fixture.mjs` + `backend/tests/test_frontend_tree.py` (new, 19 tests),
+    `backend/tests/test_app.py` (`/tree.js` is served), `frontend/CLAUDE.md`, `backend/CLAUDE.md`.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `pytest` 136 passed,
+  `node --check` clean on both changed JS files.
+- **Browser verification: NOT done — still no dev-browser/MCP browser tool in this
+  environment.** Instead the layout was rendered to a standalone SVG from the *shipped*
+  `layoutTree` output and rasterized with `qlmanage -t`, and the image was inspected: four
+  levels top to bottom, branch rectangles vs green leaf pills, `rec_graceful_exit` correctly
+  sitting alone at level 2 beside `product_interest`, nothing overlapping. That check is
+  reproducible but throwaway (`/tmp/render_tree.mjs`), not committed. A human should still
+  confirm the SVG scales sanely inside the real center column at laptop width.
+- **Learnings for future iterations:**
+  - The tree is a **DAG, not a tree**: `pricing_question` and `feature_question` both point at
+    `product_interest`. Anything that walks it must de-duplicate, or that node draws twice.
+    Depth is therefore the **longest** path from the root, not BFS distance, so every edge
+    still points downward.
+  - Node `level` in the config is documentation only; the layout computes depth from the edges.
+    They agree today, but don't start trusting the field.
+  - `qlmanage -t -s 1200 -o /tmp file.svg` rasterizes an SVG on macOS, and the Read tool can
+    view the PNG. That is the closest thing to a visual check available here — useful for any
+    future SVG/canvas story.
+  - Stubbing DOM elements for node is cheap: an object with `attrs`/`dataset`/`children`,
+    `setAttribute`, `append`, `replaceChildren`, and an `ownerDocument.createElementNS` that
+    returns another stub is enough to drive `TreeView` end to end (see `tree_fixture.mjs`).
+  - US-013 should drive `TreeView.node(id)` / `.edge(from, to)` and set `data-state`; US-015's
+    warning outline and US-016's clear are `data-state="warning"` and `reset()`. Add the CSS,
+    not another render path. `loadTree()` returns `{ view, tree }` for exactly that.
 ---

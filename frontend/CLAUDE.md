@@ -8,7 +8,7 @@ every file must be valid in the browser as-is.
 
 ```bash
 node --check frontend/*.js                 # syntax only
-cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback}.py
+cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback,tree}.py
 ```
 
 `tests/test_frontend_audio.py` is the only automated coverage the audio pipeline has: it
@@ -50,6 +50,15 @@ it can be pinned from pytest this way** — that is the only test runner this di
   elements as arguments and never touches `document`, which is what lets node drive it with
   stubs. `clear()` is the empty state (**disabled, not hidden**) and also revokes the object
   URL; call it whenever the recording it points at stops being current.
+- `tree.js` — the decision-tree drawing. `layoutTree(tree)` and `wrapLabel` are pure
+  (node-testable) and derive **every** coordinate from the graph: depth is the longest
+  path from the root, the sibling index sets x. No node id and no coordinate is ever
+  hardcoded — `test_frontend_tree.py` asserts the sample tree's ids appear nowhere in
+  this file, because "re-point the demo by editing JSON only" (PRD AC-10) depends on it.
+  Two options sharing a `next` draw **one** node and **one** edge, keyed
+  `edgeKey(from, to)`. `TreeView(svg)` draws it; every node and edge starts at
+  `data-state="idle"`, and highlighting stories should only flip `data-state` and add a
+  CSS rule — never re-render to change a look. `reset()` returns everything to idle.
 - `app.js` — page wiring only. Exports its entry points (`checkHealth`, `wireCapture`) so a
   later story can call them instead of re-deriving. `wireCapture()` returns
   `{ recorder, waveform, timer, toggle, latest }` — US-011/US-013/US-016 should drive those
@@ -67,6 +76,11 @@ it can be pinned from pytest this way** — that is the only test runner this di
   change shape on the first run — an operator mid-demo should not see widgets appear.
 - **Take DOM elements as constructor arguments** rather than calling `document.getElementById`
   inside a module. `app.js` owns every lookup; that is what makes a module node-testable.
+  A module that must *create* elements (`tree.js`) goes through `el.ownerDocument`, not the
+  `document` global, for the same reason.
+- **Split each module into a pure half and a drawing half.** The pure half (geometry,
+  formatting, limits) is where the correctness lives and is the only half pytest can run
+  under node; keep the drawing half thin enough that reading it is enough review.
 - **One `toggle()` drives every Record/Stop transition**, so the 30 s auto-stop takes the
   identical path to a click on Stop. It is guarded by a `busy` flag because those two can
   race. Add new transitions inside it rather than beside it.

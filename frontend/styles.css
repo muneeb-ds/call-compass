@@ -282,6 +282,68 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Decision tree. The SVG is laid out in its own viewBox units by tree.js and scaled
+ * to whatever the center column gives it, so nothing here knows the tree's shape.
+ * Visited/warning states are driven entirely by `data-state` on the groups. */
+.tree-graph {
+  display: flex;
+  min-height: 0;
+  padding: var(--gap);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+}
+
+.tree-graph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tree-edge {
+  stroke: var(--panel-border);
+  stroke-width: 1.5;
+  transition: stroke 120ms ease-out, opacity 120ms ease-out;
+}
+
+.tree-edge[data-state="idle"] {
+  opacity: 0.45;
+}
+
+/* Every node starts dimmed with a thin border: the "not visited" state. */
+.tree-node {
+  transition: opacity 120ms ease-out;
+}
+
+/* Dim enough to read as "not visited" from the back of the room, not so dim the
+ * labels stop being legible before the run starts. */
+.tree-node[data-state="idle"] {
+  opacity: 0.42;
+}
+
+.tree-box {
+  fill: #1b222c;
+  stroke: var(--panel-border);
+  stroke-width: 1;
+  transition: fill 120ms ease-out, stroke 120ms ease-out, stroke-width 120ms ease-out;
+}
+
+/* Leaves are pills in the recommendation accent, so they read as a different kind of
+ * thing from the branch nodes above them. */
+.tree-node[data-kind="leaf"] .tree-box {
+  fill: #16231b;
+  stroke: #2b6b3c;
+}
+
+.tree-label {
+  fill: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tree-node[data-kind="leaf"] .tree-label {
+  fill: var(--ok);
+  font-weight: 500;
+}
+
 /* Inline capture feedback: a denied mic or a rejected upload is reported here, in
  * the column it belongs to. Never an alert(). */
 .message {

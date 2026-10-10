@@ -132,7 +132,11 @@ def test_root_serves_the_frontend_shell() -> None:
 
 def test_frontend_assets_are_served() -> None:
     with TestClient(create_app(model_loader=fake_engine)) as client:
-        for path, content_type in (("/styles.css", "text/css"), ("/app.js", "javascript")):
+        for path, content_type in (
+            ("/styles.css", "text/css"),
+            ("/app.js", "javascript"),
+            ("/tree.js", "javascript"),
+        ):
             response = client.get(path)
             assert response.status_code == 200, path
             assert content_type in response.headers["content-type"], path

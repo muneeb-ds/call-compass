@@ -38,7 +38,10 @@
 
       <section class="column tree" aria-labelledby="tree-heading">
         <h2 id="tree-heading">Tree</h2>
-        <div class="placeholder grow" id="tree-slot">Decision tree</div>
+        <p class="message" id="tree-message" data-state="error" role="status" hidden></p>
+        <div class="tree-graph grow" id="tree-slot">
+          <svg id="tree-canvas" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
       </section>
 
       <section class="column trace" aria-labelledby="trace-heading">
