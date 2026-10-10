@@ -67,13 +67,32 @@ Read from `.venv/lib/python3.11/site-packages/neudecide/`. These are facts, not 
 - **Not concurrency-safe:** `generate_ids` lazily populates `self._ll_tokenizer`. Always go
   through `InferenceEngine.generate()`, which holds a lock.
 
-### Model access (blocker worth knowing)
+### Model access
 
 `neuphonic/neudecide` on the Hugging Face Hub is a **gated repo** — an unauthenticated
 `from_pretrained()` fails with `GatedRepoError: 401`. To run the real model you need either
 `HF_TOKEN` set to a token with granted access, or `CALLCOMPASS_MODEL_DIR` pointed at a local
 directory holding `config.json`, `tokenizer.model`/`tokenizer.json`, and the ONNX graphs.
 All backend tests use `tests/fakes.py` instead, so the suite needs no model and no network.
+
+**Access is available in this repo**: `HF_TOKEN` lives in the gitignored `.env` at the repo
+root. It is not auto-loaded — export it first (`set -a && . ./.env && set +a`) for anything
+that touches the real model. First construction downloads ~43 MB and takes ~18 s; later
+process starts are ~1.7 s.
+
+### Running the real model by hand
+
+`scripts/bench_latency.py` is the committed path for this: it boots a real uvicorn with the
+real model, synthesizes utterances with macOS `say` + `afconvert` at 16 kHz mono 16-bit
+(the browser encoder's exact format), POSTs them to `/api/analyze`, and reports percentiles.
+Reach for it instead of hand-rolling a one-off probe — and note its two findings:
+
+- **Timing from TTS audio is representative; branch accuracy is not.** Latency tracks audio
+  length and inference count, not speaker. But the same sentence in two `say` voices takes
+  different branches, so never conclude a tree or prompt change "works" from TTS alone.
+- **Benchmark on a quiet machine.** On a normal laptop with other apps running, the 20-run
+  median was stable (241–286 ms) but p95 swung 263–477 ms across repeats — p95 over 20
+  samples is literally the second-slowest run. Pool repeats, or report the spread.
 
 ## Node-to-tools conversion (`callcompass/tools.py`)
 

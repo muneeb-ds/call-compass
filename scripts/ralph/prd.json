@@ -306,7 +306,7 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Covers PRD AC-20 and mitigates R-1 (a pre-verified demo script) and R-7 (demo over-read as a product). The latency figures must be measured, not estimated - run the 20 runs and record the real numbers."
     }
   ]

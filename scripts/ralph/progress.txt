@@ -108,6 +108,23 @@ Started: Sat Oct 10 19:46:45 PKT 2026
 - A behaviour that is only wrong **as a sequence** (two runs accumulating, a reset that
   un-draws nothing) needs a fixture that performs the sequence. Single-snapshot
   assertions pass on exactly the bug the story exists to prevent.
+- **The real model is runnable now.** `HF_TOKEN` is in the gitignored `.env` at the repo
+  root, not auto-loaded: `set -a && . ./.env && set +a` first. First load downloads
+  ~43 MB (~18 s), later starts ~1.7 s.
+- Real end-to-end runs go through `scripts/bench_latency.py` (boots real uvicorn + real
+  model, synthesizes audio with macOS `say` + `afconvert` at 16 kHz mono 16-bit, POSTs to
+  `/api/analyze`). Extend it rather than writing another one-off probe.
+- **TTS audio is valid for timing, invalid for accuracy.** Latency tracks audio length and
+  inference count, not speaker; but the same sentence in two `say` voices takes different
+  branches. Never sign off a tree/prompt change on synthetic speech alone.
+- **A p95 over 20 samples is the second-slowest run.** It moves with one outlier: repeats
+  here held median at 241–286 ms while p95 swung 263–477 ms on a laptop with other apps
+  running. Repeat the measurement, report the spread, and say what the machine was doing —
+  don't quote a single p95 as if it were stable.
+- Verify a documented command by actually running it in a **fresh `git clone` to /tmp**
+  with a fresh venv. That is the only way "verified from a clean checkout" means anything.
+- Stale `uvicorn` processes from earlier iterations linger for hours. `ps -eo pid,etime,pcpu
+  | grep uvicorn` before trusting a manual server check or a benchmark.
 
 ---
 
@@ -808,3 +825,65 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
     over them; the `const` TDZ is fine because the closure only runs on a click. The
     alternative (threading a controller through both wiring functions) would have put
     teardown knowledge in three places.
+---
+
+## 2026-10-11 - US-017
+- Rewrote `README.md` as the full setup / tree-editing / demo-script document, and added
+  `scripts/bench_latency.py` so the quoted latency figures are reproducible rather than
+  anecdotal. **This is the first story run against the real NeuDecide model** — `HF_TOKEN`
+  is now present in `.env`, so the gated repo that blocked US-003 onward is resolved.
+- Files changed:
+  - `README.md` (rewritten): scope + explicit non-goals, requirements, clean-checkout
+    install, model access incl. the gated-repo/offline paths, run, demo script table,
+    the off-topic failure utterance, operator notes, measured latency, tree-editing guide
+    (annotated full schema + every loader constraint + the DAG/non-uniform-depth/`level`
+    caveats), API summary, quality checks.
+  - `scripts/bench_latency.py` (new): boots a real uvicorn with the real model, synthesizes
+    each demo utterance with macOS `say` + `afconvert` at 16 kHz mono 16-bit, POSTs to
+    `/api/analyze`, parses the SSE, reports median/p95/min/max for `total_inference_ms`,
+    `total_latency_ms` and client wall clock. Stdlib only (hand-rolled multipart) so it
+    adds no dependency. Clean under `ruff` and `mypy --strict`.
+  - `backend/CLAUDE.md`: model access updated (no longer a blocker), new "Running the real
+    model by hand" section with the TTS and benchmarking caveats.
+- Verified: `ruff check .` clean (incl. the new script), `mypy callcompass` clean (8 files),
+  `mypy --strict scripts/bench_latency.py` clean, `pytest` 179 passed.
+  **Install commands verified from an actual clean checkout**: fresh `git clone` to
+  `/tmp/cc-clean`, fresh `uv venv` + `uv pip install -e "backend[dev]"`, then all three
+  quality checks green there (179 passed).
+- **Latency: measured, not estimated.** 4x20 runs against the real model on an Apple M3 Pro
+  (q4, CPUExecutionProvider). Headline 20-run figures: total_latency_ms median **242 ms**,
+  p95 **263 ms**, min 50 ms. Pooled over all 80 runs: median 245 ms, p95 353 ms. A
+  3-inference path is ~276 ms median; the 1-inference short circuit/decline ~67 ms.
+  Well inside the PRD's 1 s budget.
+- **Demo script is genuinely pre-verified** (PRD R-1): every utterance in the README table
+  was confirmed to reach its listed leaf on two different `say` voices, and all 80 benchmark
+  runs resolved as intended — only the off-topic utterance came back `unplaced`. This also
+  closes the human-verification gap US-015 left open: the `unplaced` path has now been
+  exercised against the real model with real (if synthetic) off-topic audio, not a fake.
+- **Learnings for future iterations:**
+  - **The sample tree asks three questions of one sentence.** An utterance carrying only an
+    intent ("what does Pro cost?") legitimately stops at `product_interest` or `signal_check`
+    with `empty_response` — the model is declining because the signal genuinely isn't there,
+    not malfunctioning. A first draft of the demo script failed this way on 5 of 6 lines;
+    the utterances that demo well state intent **and** team size **and** objection. Any
+    future demo content or tree edit has to respect that or it looks broken on stage.
+  - **TTS is fine for timing, misleading for accuracy.** `say -v Samantha` and `say -v Daniel`
+    on the identical sentence took different branches and disagreed on outcome in ~a third of
+    the probes. Latency depends on audio length and inference count, so the benchmark is
+    sound; branch accuracy on synthetic speech is not evidence about a human voice. The
+    README says so explicitly rather than letting the reader over-read the numbers.
+  - **p95 over 20 samples is just the second-slowest run.** Four repeats held the median at
+    241–286 ms but moved p95 across 263–477 ms, tracking background load (Steam was holding
+    a core; load average ~4–6). Reporting one p95 as a fact would have been false precision —
+    the README gives the quietest run, the pooled 80-run figure, the observed range, and what
+    the machine was doing.
+  - The out-of-enum argument values predicted back in US-003/US-004 are **real and observable**
+    on the live model: `pricing_focus='sales'`, `growth_signal='dashboards'`,
+    `decline_tone='thanks'`. The advisory-enum decision in `traversal.py` (log, pass through,
+    branch on tool name) is right, and the README documents the behaviour so an operator
+    seeing a stray value in the trace doesn't read it as a bug.
+  - Verify documented install commands in a **fresh clone to /tmp**, not in the working tree —
+    the working tree has a built venv and an editable install already, so it cannot fail.
+  - `qlmanage`-style visual checking wasn't needed here (no UI change), but note no browser
+    tool is available in this environment; the browser-verification gaps flagged in US-008
+    through US-016 remain open for a human.
