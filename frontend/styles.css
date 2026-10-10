@@ -235,6 +235,53 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Playback row. Stays visible and merely disabled before a recording exists, so the
+ * column's shape doesn't shift the first time the operator records. */
+.playback {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: var(--gap);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+}
+
+.playback audio {
+  display: none;
+}
+
+.play {
+  min-width: 4.5rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: #1f2630;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.play:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.play:disabled {
+  opacity: 0.45;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.play[data-playing="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.playback-time {
+  margin: 0;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Inline capture feedback: a denied mic or a rejected upload is reported here, in
  * the column it belongs to. Never an alert(). */
 .message {

@@ -200,7 +200,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Playback is a demo-operator diagnostic for PRD risk R-1: it is how the operator confirms what the model actually received after a misfire. Must use the encoded bytes, not a separate MediaRecorder blob."
     },
     {

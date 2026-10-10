@@ -8,7 +8,7 @@ every file must be valid in the browser as-is.
 
 ```bash
 node --check frontend/*.js                 # syntax only
-cd backend && ../.venv/bin/pytest tests/test_frontend_audio.py tests/test_frontend_timing.py
+cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback}.py
 ```
 
 `tests/test_frontend_audio.py` is the only automated coverage the audio pipeline has: it
@@ -45,6 +45,11 @@ it can be pinned from pytest this way** — that is the only test runner this di
   over `getByteTimeDomainData`, `stop()` leaves a flat gray baseline. Cosmetic only; it
   never reads or alters the captured samples. The canvas is sized by CSS and its backing
   store is re-matched per frame, so never set `canvas.width`/`height` in HTML.
+- `playback.js` — `Playback(button, readout, audio)`: play/pause over the recording's own
+  `blob`, so the operator hears the exact bytes the backend received. Takes its three DOM
+  elements as arguments and never touches `document`, which is what lets node drive it with
+  stubs. `clear()` is the empty state (**disabled, not hidden**) and also revokes the object
+  URL; call it whenever the recording it points at stops being current.
 - `app.js` — page wiring only. Exports its entry points (`checkHealth`, `wireCapture`) so a
   later story can call them instead of re-deriving. `wireCapture()` returns
   `{ recorder, waveform, timer, toggle, latest }` — US-011/US-013/US-016 should drive those
@@ -56,7 +61,12 @@ it can be pinned from pytest this way** — that is the only test runner this di
   Never `alert()`, never a silent catch — a demo operator has to see on screen that the
   mic was denied.
 - UI state lives in `data-*` attributes set from the real object's state
-  (`data-recording` from `recorder.recording`), not in a parallel CSS class.
+  (`data-recording` from `recorder.recording`, `data-playing` from `audio.paused`), not in a
+  parallel CSS class.
+- **A control with no data yet is `disabled`, never `hidden`.** The Capture column must not
+  change shape on the first run — an operator mid-demo should not see widgets appear.
+- **Take DOM elements as constructor arguments** rather than calling `document.getElementById`
+  inside a module. `app.js` owns every lookup; that is what makes a module node-testable.
 - **One `toggle()` drives every Record/Stop transition**, so the 30 s auto-stop takes the
   identical path to a click on Stop. It is guarded by a `busy` flag because those two can
   race. Add new transitions inside it rather than beside it.

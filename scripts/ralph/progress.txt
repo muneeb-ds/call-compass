@@ -77,6 +77,11 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   node-run pytest. Hand-writing the same limit twice is how a valid recording becomes a 400.
 - All browser audio limits live in `wav.js` (`SAMPLE_RATE`, `MAX_SECONDS`, `clampSamples`);
   it is the only frontend module allowed to know the wire format or trim audio.
+- A frontend module takes its **DOM elements as constructor arguments** and never calls
+  `document.*`; `app.js` owns every lookup. That is what makes the module loadable from
+  node with a handful of stub objects, which is this repo's only JS test path.
+- A control with no data yet is **`disabled`, never `hidden`** — the Capture column must
+  not change shape mid-demo as widgets appear.
 
 ---
 
@@ -459,4 +464,56 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
     `button.disabled` alone is not enough because the auto-stop is not a click.
   - The `onLimit` callback can reference `toggle` before its declaration — function
     declarations hoist within `wireCapture`, and the arrow only runs later.
+---
+
+## 2026-10-10 - US-011
+- Implemented the recording playback control in the Capture column.
+- Files changed:
+  - `frontend/playback.js` (new): `Playback(button, readout, audio)` — play/pause over the
+    recording's own `blob` (the same bytes the upload sends), `0:03 / 0:07` readout reusing
+    `timer.js`'s `formatElapsed`, `load(recording)` / `clear()` / `toggle()`, object-URL
+    lifecycle with revoke on reload and clear.
+  - `frontend/index.html`: `#playback-slot` is now a real row (`#play-button`,
+    `#playback-time`, hidden `#playback-audio`) instead of a placeholder; the button ships
+    with `disabled` in the markup so it is grayed before any JS runs.
+  - `frontend/styles.css`: `.playback`, `.play` (incl. `:disabled` and `[data-playing]`),
+    `.playback-time`.
+  - `frontend/app.js`: constructs `Playback`, `playback.clear()` on start, `playback.load()`
+    on stop, click wiring, and `playback` added to `wireCapture()`'s return.
+  - `backend/tests/playback_fixture.mjs` + `backend/tests/test_frontend_playback.py` (new,
+    11 tests): node drives the shipped `playback.js` with stub DOM elements through the full
+    state sequence; pytest asserts the served bytes equal the uploaded bytes, that they
+    `decode_wav` and POST 200, and the disabled/enabled/ended/cleared states.
+  - `frontend/CLAUDE.md`, `backend/CLAUDE.md`.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean
+  (11 files), `pytest` 117 passed (was 106). `node --check` clean on all seven JS files.
+  Booted a live uvicorn with the fake engine: `/`, `/styles.css`, `/app.js`, `/playback.js`,
+  `/api/health` all 200 with the right content types, and the served HTML contains all three
+  playback element ids.
+- **Browser verification: NOT done — no dev-browser/MCP browser tool in this environment.**
+  Manual check still needed over `http://localhost`: the Play button is visibly grayed and
+  unclickable before recording, record→stop enables it, pressing it plays the utterance back
+  while the label flips to Pause and the readout counts up, and starting a new recording
+  grays it again.
+- **Learnings for future iterations:**
+  - **`playback.js` takes its three elements as constructor arguments** and never touches
+    `document`. That is the whole reason it is node-testable: `playback_fixture.mjs` stubs a
+    button, a readout and an audio element (~40 lines) and drives the real class. Any future
+    UI module should follow the same shape — `app.js` does the `getElementById` calls.
+  - `URL.createObjectURL` / `revokeObjectURL` do **not** exist in node, but `URL` is a plain
+    class, so assigning the two statics is enough to stub them. `Blob` *is* global in node 18+,
+    so the fixture can read the served bytes back with `await blob.arrayBuffer()` and compare
+    them byte-for-byte to the upload — which is exactly the AC.
+  - `audio.duration` is `NaN` until metadata loads, so the readout's denominator is
+    `recording.durationMs` from the encoder, not the element. Same reason the backend's
+    `duration_ms` is computed from the sample count.
+  - On `ended`, reset `currentTime` to 0. Without it a second press on Play is a no-op and the
+    control looks dead at the end of the file.
+  - The button carries `disabled` in `index.html` as well as from `Playback.clear()`, so it is
+    grayed during the module-load gap rather than briefly live.
+  - `playback.clear()` is called at the **start** of a recording, not just on reset: leaving
+    the previous take playable would let the operator audition audio the current run never
+    used — the exact confusion playback exists to prevent.
+  - US-016's Reset should call `playback.clear()` (already exposed on `wireCapture()`'s
+    return) rather than re-querying the DOM or inventing its own teardown.
 ---

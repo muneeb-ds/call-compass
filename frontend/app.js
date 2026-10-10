@@ -5,6 +5,7 @@
 // step — this is loaded directly as an ES module.
 
 import { MicrophoneError, Recorder } from "./capture.js";
+import { Playback } from "./playback.js";
 import { RecordingTimer } from "./timer.js";
 import { Waveform } from "./waveform.js";
 
@@ -108,6 +109,11 @@ export function wireCapture() {
   const timer = new RecordingTimer(document.getElementById("timer"), {
     onLimit: () => void toggle(),
   });
+  const playback = new Playback(
+    /** @type {HTMLButtonElement} */ (document.getElementById("play-button")),
+    document.getElementById("playback-time"),
+    /** @type {HTMLAudioElement} */ (document.getElementById("playback-audio")),
+  );
   /** @type {import("./capture.js").Recording|null} */
   let recording = null;
   let busy = false;
@@ -128,6 +134,9 @@ export function wireCapture() {
 
   async function start() {
     setCaptureMessage("");
+    // The previous take is gone the moment a new one begins; leaving it playable would
+    // let the operator audition audio the current run never used.
+    playback.clear();
     await recorder.start();
     render(true);
     waveform.start(recorder.analyser);
@@ -137,6 +146,7 @@ export function wireCapture() {
   async function stop() {
     recording = await recorder.stop();
     settle();
+    if (recording) playback.load(recording);
     const problem = recording ? await verifyAccepted(recording.bytes) : "";
     if (problem) {
       setCaptureMessage(problem, "error");
@@ -169,6 +179,7 @@ export function wireCapture() {
   }
 
   button.addEventListener("click", () => void toggle());
+  playback.button.addEventListener("click", () => playback.toggle());
   // Keeps the trace spanning the column when the window changes size while idle.
   window.addEventListener("resize", () => waveform.render());
 
@@ -176,7 +187,7 @@ export function wireCapture() {
   waveform.stop();
   timer.reset();
   /** Exposed for the later stories that need the captured bytes or the controls. */
-  return { recorder, waveform, timer, toggle, latest: () => recording };
+  return { recorder, waveform, timer, playback, toggle, latest: () => recording };
 }
 
 checkHealth();
