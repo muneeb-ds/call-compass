@@ -1,0 +1,313 @@
+{
+  "project": "CallCompass",
+  "branchName": "ralph/callcompass-mvp",
+  "description": "CallCompass MVP - a demo app showing how NeuDecide (43 MB on-device speech-to-tool-call model, ONNX/CPU via the neudecide Python package) guides a sales agent through a decision tree from one recorded customer utterance. FastAPI backend, vanilla JS frontend, tree defined in a single JSON config, SSE-streamed node-by-node traversal, full run under 1 second on laptop CPU. Full PRD at tasks/prd-callcompass-mvp.md.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Repository scaffold and quality checks",
+      "description": "As a developer, I need a runnable project skeleton with quality checks wired up so that every later story can be verified before commit.",
+      "acceptanceCriteria": [
+        "Create repo layout: backend/ (Python package callcompass), frontend/, config/",
+        "backend/pyproject.toml declares runtime deps: fastapi, uvicorn[standard], neudecide, onnxruntime, numpy, pydantic",
+        "backend/pyproject.toml declares dev deps: ruff, mypy, pytest, httpx",
+        "backend/callcompass/main.py exposes a FastAPI app that starts with `uvicorn callcompass.main:app`",
+        "ruff check . passes with no errors",
+        "mypy backend/callcompass passes with no errors",
+        "pytest runs and collects at least one passing placeholder test",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Foundation story. Python 3.11+. Establishes the quality-check commands every later story must run: ruff check, mypy, pytest. Record those exact commands in a CLAUDE.md so later iterations do not have to rediscover them."
+    },
+    {
+      "id": "US-002",
+      "title": "Tree config schema, Pydantic models, and validating loader",
+      "description": "As a demo operator, I want the decision tree defined in one JSON file so that I can change the sales flow without touching code.",
+      "acceptanceCriteria": [
+        "Pydantic models in backend/callcompass/tree.py implement the Tree Config Schema from the PRD (tree_id, version, product, root, nodes map; branch nodes have options with tool_name/description/argument{name,enum,description}/next; leaf nodes have recommendation and optional rationale)",
+        "Loader rejects an argument spec that has no non-empty `enum` list (enum-only arguments are enforced structurally)",
+        "Loader rejects a config that declares a tool_name of `none_of_these` (that tool is backend-injected, never configured)",
+        "Validation rejects each of: duplicate node ids, a node whose id does not match its map key, a `next` pointer to a missing node id, a branch node with zero options, a leaf without `recommendation`, a cycle, a root id absent from `nodes`, duplicate tool_name within one node",
+        "Validation failure raises a single-line error naming the offending node id",
+        "config/tree.json contains the complete `northbeam-saas-v1` sample tree from the PRD verbatim, including the level-2 short-circuit leaf `rec_graceful_exit`",
+        "Unit tests cover one valid tree plus at least four distinct invalid trees (missing next pointer, duplicate id, cycle, empty options)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Copy the sample tree JSON exactly from the PRD's 'Sample Tree Config' section. Note the tree is NOT uniform depth: rec_graceful_exit is a level-2 leaf reached after one inference. Every later story must handle varying depth."
+    },
+    {
+      "id": "US-003",
+      "title": "Load NeuDecide once at startup with warmup and health endpoint",
+      "description": "As a demo operator, I want the model loaded a single time when the server boots so that no request pays model-load cost.",
+      "acceptanceCriteria": [
+        "Model is loaded in a FastAPI lifespan handler and stored on app.state; it is never constructed per request",
+        "Startup logs model load duration in ms and confirms the CPU/ONNX execution provider",
+        "A warmup inference runs at startup against a short silent audio buffer so the first real request is not cold",
+        "GET /api/health returns {\"status\":\"ok\",\"model_loaded\":true,\"model_load_ms\":<int>,\"tree_id\":\"<id>\",\"node_count\":<int>}",
+        "Tree config is loaded and validated at startup via US-002's loader; an invalid tree fails startup with the single-line error",
+        "Server fails fast with a readable message if the model cannot be loaded",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Confirm the real neudecide API before writing this: constructor signature, and whether generate() accepts a file path, raw bytes, or a NumPy float array (PRD Open Questions 1-3). If generate() is not thread-safe, guard it with a lock or a single-worker executor. Record what you find in backend/callcompass/CLAUDE.md - US-004 and US-005 depend on it."
+    },
+    {
+      "id": "US-004",
+      "title": "Node-to-tools conversion function",
+      "description": "As a developer, I need each branch node converted into the model's tool format so that the model picks from exactly that node's options.",
+      "acceptanceCriteria": [
+        "A pure function converts one branch node into the tool list passed to model.generate(audio, tools)",
+        "Function performs no model, network, or filesystem calls",
+        "Every generated tool list includes a synthetic `none_of_these` tool with no required arguments",
+        "Each node option becomes a tool whose named argument is an enum constrained to exactly that option's declared values",
+        "Unit tests assert the exact tool-list shape for the sample tree's `intent` root node and for the mid-tree `signal_check` node",
+        "Unit test asserts `none_of_these` is present in every node's tool list across the whole sample tree",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Keep this isolated in ONE file. The PRD flags (R-6) that the assumed neudecide tool-schema shape may not match the shipped package; isolating conversion here makes an API mismatch a single-file change."
+    },
+    {
+      "id": "US-005",
+      "title": "Traversal engine with fake-model tests",
+      "description": "As a developer, I want a traversal engine that walks the tree over one audio buffer so that the traversal logic is testable without HTTP or a browser.",
+      "acceptanceCriteria": [
+        "traverse(audio, tree, model) yields one step record per generate() call with fields: node_id, node_label, tool_called, arguments, latency_ms, next_node_id",
+        "The same audio buffer is passed at every node (no re-recording, no slicing)",
+        "Traversal terminates as `completed` on reaching a leaf, emitting the leaf recommendation and rationale",
+        "Traversal terminates as `unplaced` with reason `none_of_these`, `empty_response`, `unknown_tool`, or `depth_limit`",
+        "A hard depth cap of 10 steps prevents runaway traversal",
+        "latency_ms measures only the generate() call, via time.perf_counter",
+        "Unit tests with a fake scripted model cover: full happy path to a leaf, none_of_these at level 1, empty response mid-tree, unknown tool name, the level-2 short-circuit via not_interested",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Implement as a generator so US-007 can stream steps as they occur. The fake model (scripted list of responses) is the key test fixture - put it somewhere reusable, US-007's integration test needs it too."
+    },
+    {
+      "id": "US-006",
+      "title": "Audio validation and WAV decode",
+      "description": "As a developer, I need uploaded audio validated and decoded so that bad input produces a clear 4xx instead of a model crash.",
+      "acceptanceCriteria": [
+        "Accepts WAV upload at 16 kHz mono 16-bit PCM and decodes to the array shape neudecide expects",
+        "Rejects with HTTP 400 and a specific message naming the actual value for each of: wrong sample rate, more than one channel, non-WAV payload, duration over 30 seconds, duration under 0.3 seconds, body over 2 MB",
+        "Example rejection message format: \"Audio must be 16000 Hz mono; received 44100 Hz stereo.\"",
+        "A 1-second 16 kHz mono WAV fixture is generated in tests and decodes successfully",
+        "Unit tests cover at least three distinct rejection cases",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Decode shape must match what US-003 established about generate()'s expected audio input. A checked-in or test-generated fixture WAV lets the backend be tested without a browser - the PRD calls this out as mitigation for R-5."
+    },
+    {
+      "id": "US-007",
+      "title": "SSE traversal endpoint and GET /api/tree",
+      "description": "As a frontend developer, I want traversal results streamed per node so that the UI can light up each node at the moment its inference actually returns.",
+      "acceptanceCriteria": [
+        "POST /api/analyze accepts multipart/form-data with an `audio` WAV file and responds text/event-stream",
+        "Emits events in order: `started`, one `step` per node, exactly one terminal event (`completed` or `unplaced`), then `done`",
+        "Event payloads match the PRD's API Endpoints schemas exactly (field names and types)",
+        "`completed` includes leaf_node_id, label, recommendation, rationale, path, inference_count, total_inference_ms, total_latency_ms",
+        "`unplaced` includes stopped_at_node_id, stopped_at_label, reason, path, inference_count, total_inference_ms, total_latency_ms",
+        "Audio rejection from US-006 returns HTTP 400 JSON before the stream opens",
+        "A mid-stream exception emits an `error` event with a message and node_id, then `done`; the connection is never left hanging",
+        "Synchronous CPU inference runs in a thread executor so the event loop is not blocked",
+        "GET /api/tree returns the validated tree config verbatim",
+        "Integration test with httpx and the fake model asserts the full event sequence for the happy path and for the unplaced path",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Last backend story - after this the API surface is complete and all remaining work is frontend. `done` must always be the final event, including after `error`."
+    },
+    {
+      "id": "US-008",
+      "title": "Frontend shell served by FastAPI",
+      "description": "As a developer, I need a static frontend shell served from the same process so that the demo runs on one port with no build step.",
+      "acceptanceCriteria": [
+        "FastAPI serves frontend/ as static files; GET / returns the page",
+        "Page is vanilla HTML/CSS/JS using ES modules, with no bundler and no build step",
+        "Three-column layout renders per the PRD screen layout: Capture (~25%), Tree (~50%), Trace (~25%), with a result area below the tree spanning the center and right columns",
+        "Dark background styling suitable for projection; latency figures styled in monospace",
+        "Columns contain labelled empty placeholders; no behaviour is wired up yet",
+        "Page calls GET /api/health on load and shows a visible inline error if the backend is not ready",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Pure layout and plumbing story - no recording, no tree rendering, no SSE. Existing only so later UI stories have a page to attach to. Confirm with dev-browser that all three columns and the result area are visible at laptop width."
+    },
+    {
+      "id": "US-009",
+      "title": "Browser audio capture and 16 kHz mono WAV encoding",
+      "description": "As a sales agent, I want my recording converted to the exact format the backend needs so that the model receives valid audio.",
+      "acceptanceCriteria": [
+        "getUserMedia captures microphone audio on button press",
+        "Captured audio is converted to 16 kHz mono 16-bit PCM with a valid WAV header, entirely client-side",
+        "Uses AudioContext at 16 kHz where supported, otherwise resamples in an AudioWorklet",
+        "The encoded WAV bytes are retained in memory for both upload and playback (same bytes for both)",
+        "POSTing the encoded WAV to /api/analyze is accepted by US-006's validation (no HTTP 400)",
+        "Denied or unavailable microphone shows an inline message in the Capture column - never alert() and never a silent failure",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "The highest-risk frontend story (PRD R-5): a subtly wrong WAV header or sample rate produces confidently wrong model output rather than an error. Verify acceptance by actually POSTing to the live backend and confirming no 400. Target Chrome/Edge."
+    },
+    {
+      "id": "US-010",
+      "title": "Record/stop button with live waveform and timer",
+      "description": "As a sales agent, I want to record a customer utterance with visible feedback so that I know the mic is live and how long I have left.",
+      "acceptanceCriteria": [
+        "A single circular button toggles Record to Stop, with a visually distinct recording state (red pulse)",
+        "A live waveform renders on a Canvas from Web Audio API analyser data while recording",
+        "Waveform sits flat and gray when idle",
+        "A timer counts up and displays the 30-second ceiling, e.g. \"0:12 / 0:30\"",
+        "Recording auto-stops at exactly 30 seconds",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Builds the UI on top of US-009's capture pipeline. Split from capture deliberately so the audio-format work and the visual work can each be verified on their own."
+    },
+    {
+      "id": "US-011",
+      "title": "Recording playback control",
+      "description": "As a sales agent, I want to play back what I just recorded so that I can confirm the audio the model actually heard.",
+      "acceptanceCriteria": [
+        "After stopping, a play/pause control plus an elapsed-time readout appears in the Capture column",
+        "Playback uses the same WAV bytes that are sent to the backend",
+        "Control is disabled and grayed (not hidden) before any recording exists",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Playback is a demo-operator diagnostic for PRD risk R-1: it is how the operator confirms what the model actually received after a misfire. Must use the encoded bytes, not a separate MediaRecorder blob."
+    },
+    {
+      "id": "US-012",
+      "title": "Static tree visualization from config",
+      "description": "As a demo viewer, I want to see the whole decision tree before anything runs so that I understand the space the model is choosing within.",
+      "acceptanceCriteria": [
+        "Tree is fetched from GET /api/tree on page load and rendered as an inline SVG node graph, levels laid out top to bottom",
+        "Every node shows its label; leaf nodes use a distinct shape and accent color from branch nodes",
+        "All nodes start dimmed at low opacity with a thin border (\"not visited\" state)",
+        "Layout is computed at render time from node depth and sibling index, with no hardcoded node coordinates",
+        "Renders the non-uniform sample tree correctly, including the level-2 leaf rec_graceful_exit",
+        "Editing a node label in config/tree.json and restarting the server changes the rendering with no code edit",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "No hardcoded positions - this is what makes PRD AC-10 (re-point the demo by editing JSON only) true. Verify the uneven-depth case renders sanely, since rec_graceful_exit sits at level 2 while its siblings' subtrees reach level 4."
+    },
+    {
+      "id": "US-013",
+      "title": "Live path highlighting and trace panel from SSE",
+      "description": "As a demo viewer, I want each node to light up as its inference returns so that I can see the traversal happening in real time.",
+      "acceptanceCriteria": [
+        "On stop, the frontend POSTs the WAV to /api/analyze and consumes the SSE stream via fetch + ReadableStream (not EventSource, which cannot POST a file body)",
+        "Each `step` event lights its node and draws the edge from its parent, in arrival order",
+        "Each lit node displays the option picked, the argument name and value, and latency_ms",
+        "A step card is appended to the Trace column per step: node label header, option picked in bold, argument as name: value in monospace, right-aligned latency badge",
+        "A running total (e.g. \"Total: 384 ms\") is pinned at the top of the Trace column and updates per step",
+        "Node highlight transitions are approximately 120 ms",
+        "Record button is disabled while a traversal is in flight",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "The centerpiece story. Nodes must light on actual event arrival - no artificial delays, since real per-call timing is the thing being demonstrated. Verify with a real recording end to end against the live backend."
+    },
+    {
+      "id": "US-014",
+      "title": "Recommendation leaf card",
+      "description": "As a sales agent, I want the final recommendation in plain language so that I know what to say next.",
+      "acceptanceCriteria": [
+        "On `completed`, a green-accented card renders in the result area with the leaf recommendation text at large readable size",
+        "Card shows the path taken as a readable breadcrumb of chosen options, e.g. \"Pricing question -> Pro tier -> Budget objection\"",
+        "Card shows total end-to-end latency in ms in monospace",
+        "Card renders only after the terminal event, never mid-traversal",
+        "Rationale is shown in smaller text beneath the recommendation",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Breadcrumb shows chosen OPTION labels, not node labels (PRD Open Question 5 - option labels read better and were the assumption)."
+    },
+    {
+      "id": "US-015",
+      "title": "Couldn't place this state",
+      "description": "As a demo viewer, I want an explicit failure state so that the demo is honest when the model declines to choose.",
+      "acceptanceCriteria": [
+        "On `unplaced`, an amber-accented card reads \"Couldn't place this\" in the result area",
+        "Card names the node where traversal stopped and the reason in plain language (none of these / empty response / unrecognized tool / depth limit)",
+        "Nodes visited before the stop remain lit",
+        "The unresolved node takes a distinct warning outline, visually different from both visited and unvisited nodes",
+        "No recommendation text is shown in this state",
+        "An `error` event renders a recoverable UI state, not a hung spinner",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Verify by recording genuinely off-topic audio (e.g. weather chat) against the live backend, not just by mocking the event. PRD AC-8 requires the real path."
+    },
+    {
+      "id": "US-016",
+      "title": "Reset button",
+      "description": "As a demo operator, I want a one-click reset so that I can run the demo repeatedly in front of an audience.",
+      "acceptanceCriteria": [
+        "A secondary Reset button at the bottom of the Capture column clears the recording, playback control, all node highlighting, the Trace column, and any result card",
+        "Tree returns to its fully dimmed initial state without a page reload",
+        "Reset is enabled after both `completed` and `unplaced`, and is disabled before any run has finished",
+        "Reset cancels any in-flight SSE stream",
+        "Two consecutive runs produce correct, non-accumulating results (trace cards do not stack up from the previous run)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Verify the non-accumulation criterion explicitly: run, reset, run again, and confirm the Trace column and total latency reflect only the second run."
+    },
+    {
+      "id": "US-017",
+      "title": "README with setup, tree editing guide, and demo script",
+      "description": "As a colleague who did not build this, I want documentation so that I can run the demo without asking a question.",
+      "acceptanceCriteria": [
+        "README.md documents install and run commands verified from a clean checkout",
+        "README documents how to edit config/tree.json, including the full schema and the constraints the loader enforces",
+        "README includes a suggested demo script with at least one example utterance per level-1 branch (pricing_question, feature_question, not_interested)",
+        "README includes one example off-topic utterance expected to produce the \"couldn't place this\" state",
+        "README states the single-utterance scope and the explicit non-goals (no live multi-turn calls, no CRM, English only, no speaker demographics) so the demo is not over-read as a product",
+        "README documents the measured median and p95 total latency over 20 runs",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Covers PRD AC-20 and mitigates R-1 (a pre-verified demo script) and R-7 (demo over-read as a product). The latency figures must be measured, not estimated - run the 20 runs and record the real numbers."
+    }
+  ]
+}
