@@ -20,6 +20,16 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   re-shape `config/tree.json` by hand.
 - `config/tree.json` must stay byte-equivalent (as JSON) to the PRD's "Sample Tree Config".
   Verify with a short `json.loads` comparison against the PRD markdown rather than by eye.
+- **Build the FastAPI app via `create_app(model_loader=..., tree_path=...)`**, not a module-level
+  `app` with hardcoded deps. `app = create_app()` is production; every test passes
+  `model_loader=fake_engine` so the suite needs no model and no network.
+- Shared test doubles live in `backend/tests/fakes.py` (`FakeModel`, `fake_engine`); `tests/` is a
+  package so `from .fakes import ...` works. Extend these rather than adding a new double.
+- Before coding against a third-party package, **read its installed source** in
+  `.venv/lib/python3.11/site-packages/<pkg>/` and record the confirmed signatures in
+  `backend/CLAUDE.md`. Don't infer an API from the PRD's assumptions.
+- Messages that embed a third-party exception must collapse it with `" ".join(str(exc).split())`
+  — upstream errors (e.g. HF's `GatedRepoError`) are multi-line and bury the actionable hint.
 
 ---
 
@@ -71,4 +81,51 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   - `Tree.branch(node_id)` is the typed accessor for branch nodes; US-004/US-005 should use it
     instead of `isinstance` checks scattered around.
   - The sample tree has 8 nodes (3 branch, 5 leaf) — useful for US-003's `node_count` assertion.
+---
+
+## 2026-10-10 - US-003
+- Implemented one-time model loading in a FastAPI lifespan handler, a startup warmup
+  inference, and `GET /api/health`.
+- Files changed:
+  - `backend/callcompass/model.py` (new: `InferenceEngine`, `SpeechToolModel` Protocol,
+    `ModelLoadError`, `load_engine`, `_failure_message`/`_one_line`)
+  - `backend/callcompass/main.py` (rewritten: `create_app()` factory with injectable
+    `model_loader`/`tree_path`, lifespan handler, `HealthResponse`, `/api/health`;
+    dropped the US-001 `/api/ping` placeholder)
+  - `backend/tests/fakes.py` (new: `FakeModel`, `fake_engine`, `NONE_OF_THESE_CALL`)
+  - `backend/tests/__init__.py` (new, makes `tests` a package for shared fixtures)
+  - `backend/tests/test_app.py` (rewritten: 9 tests)
+  - `backend/CLAUDE.md` (new sections: confirmed `neudecide` API, model access, model
+    loading, tests)
+- Verified: `ruff check .` clean, `mypy callcompass` clean (4 files), `pytest` 27 passed.
+  Also booted the real app: the tree loads and logs, and the gated-model failure produces a
+  genuine one-line `ModelLoadError` with an actionable hint.
+- **BLOCKER (carries into every later story that wants real inference):** the Hugging Face
+  repo `neuphonic/neudecide` is **gated**. `from_pretrained()` without credentials fails
+  `GatedRepoError: 401`, so the real 43 MB model could NOT be downloaded or run in this
+  environment. US-003 is implemented against the real API (signatures read from the
+  installed package source, not guessed) and is fully tested with a fake. To run the real
+  model, set `HF_TOKEN` to a token with granted access, or set `CALLCOMPASS_MODEL_DIR` to a
+  local model directory. US-009/US-013/US-015, which require end-to-end runs against live
+  inference, cannot be fully verified until one of those is available.
+- **Learnings for future iterations:**
+  - **`generate()` returns `[]` as a normal result** (no tool applied, or unparseable
+    output). US-005's `empty_response` termination reason is exactly this case.
+  - **The declared `enum` does NOT constrain decoding.** `grammar.tool_call_grammar` builds
+    the grammar from parameter *names* only, with `{}` as each value schema. So the model can
+    return an argument value outside the configured `enum`. US-005 must validate enum
+    membership itself after `generate()` returns — treating an out-of-enum value as a
+    `none_of_these`-style non-answer rather than trusting it blindly.
+  - Tool shape is `{"name", "description", "parameters"}` with `parameters` as JSON Schema.
+    US-004 should emit exactly that; `none_of_these` gets
+    `{"type": "object", "properties": {}, "required": []}`.
+  - `NeuDecide.generate()` is **not** concurrency-safe (lazy `self._ll_tokenizer`), hence the
+    lock in `InferenceEngine`. US-007 still needs a thread executor to keep the event loop
+    free; the lock just serializes the CPU work behind it.
+  - Audio input: a NumPy `(samples,)` float32 array in `[-1, 1]` at 16 kHz is the shape
+    US-006 should decode to. `model.sample_rate` is the authoritative rate.
+  - `TestClient` must be used as a **context manager** for lifespan to run at all; a bare
+    `TestClient(app).get(...)` silently skips startup and `app.state` is never populated.
+  - A `pydantic.BaseModel` return annotation on a route is how field names/types get pinned
+    for the PRD's exact payload shapes — useful for US-007's event schemas too.
 ---

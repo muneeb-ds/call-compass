@@ -43,6 +43,56 @@ cd backend
 - Duplicate node ids are caught by a `json.loads` `object_pairs_hook` — a plain dict would
   silently dedupe them, so parse config text through `parse_tree`, not `json.loads`.
 
+## The `neudecide` API (confirmed by reading the installed source, v0.1.0)
+
+Read from `.venv/lib/python3.11/site-packages/neudecide/`. These are facts, not guesses:
+
+- **Construction:** `NeuDecide(model_dir, variant="q4", threads=None, providers=None)` or
+  `NeuDecide.from_pretrained(repo_id="neuphonic/neudecide", variant="q4", token=None)`.
+  Default providers are `["CPUExecutionProvider"]`.
+- **Inference:** `model.generate(audio, tools, sample_rate=None, constrained=True,
+  max_new_tokens=None)` → `list[{"name": str, "arguments": dict}]`, and **`[]` when no tool
+  applies or the output doesn't parse**. An empty list is a normal result, not an error.
+- **Audio:** a WAV path, or a NumPy array `(samples,)` / `(samples, channels)`. Float arrays
+  must already be in `[-1, 1]`; integer arrays are scaled automatically. Pass `sample_rate=`
+  if it isn't `model.sample_rate` (16000). Internally resampled with `soxr` and truncated to
+  `config["max_audio_seconds"]`.
+- **Tool schema:** each tool is `{"name", "description", "parameters"}`, where `parameters` is
+  JSON Schema (`{"type": "object", "properties": {...}, "required": [...]}`) — a flat
+  `{key: {...}}` mapping also works. See `grammar.tool_parameters`. **Only parameter *names*
+  constrain decoding**: `grammar.tool_call_grammar` builds the grammar from keys with `{}` as
+  each value schema, so a declared `enum` does *not* restrict values at the grammar level.
+  Validate enum membership yourself after `generate()` returns.
+- **Execution provider** is readable at runtime via `model.audio_encoder.get_providers()`.
+- **Not concurrency-safe:** `generate_ids` lazily populates `self._ll_tokenizer`. Always go
+  through `InferenceEngine.generate()`, which holds a lock.
+
+### Model access (blocker worth knowing)
+
+`neuphonic/neudecide` on the Hugging Face Hub is a **gated repo** — an unauthenticated
+`from_pretrained()` fails with `GatedRepoError: 401`. To run the real model you need either
+`HF_TOKEN` set to a token with granted access, or `CALLCOMPASS_MODEL_DIR` pointed at a local
+directory holding `config.json`, `tokenizer.model`/`tokenizer.json`, and the ONNX graphs.
+All backend tests use `tests/fakes.py` instead, so the suite needs no model and no network.
+
+## Model loading (`callcompass/model.py`)
+
+- `load_engine()` constructs the model **once**, times it, logs the duration and execution
+  providers, then runs a warmup inference on 0.5 s of silence. Any failure in either step
+  becomes a single-line `ModelLoadError` so startup fails fast.
+- `create_app(model_loader=..., tree_path=...)` in `main.py` injects both dependencies;
+  `app = create_app()` is the production instance. **Tests should always pass a
+  `model_loader`** (use `tests.fakes.fake_engine`) — otherwise they try to download the model.
+- Startup order in the lifespan handler is **tree first, then model**: config errors are cheap
+  and should surface before the expensive load.
+- Downstream code depends on the `SpeechToolModel` Protocol, never on `NeuDecide` directly.
+
+## Tests
+
+- `tests/` is a package (`tests/__init__.py`), so share fixtures via `from .fakes import ...`.
+- `tests/fakes.py` holds `FakeModel` (a scripted `generate()` that records its `calls`) and
+  `fake_engine()`. Extend these rather than writing a new double per story.
+
 ## Dependencies
 
 - Adding a runtime dep means editing `[project].dependencies` in `backend/pyproject.toml`,

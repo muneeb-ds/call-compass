@@ -56,7 +56,7 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Confirm the real neudecide API before writing this: constructor signature, and whether generate() accepts a file path, raw bytes, or a NumPy float array (PRD Open Questions 1-3). If generate() is not thread-safe, guard it with a lock or a single-worker executor. Record what you find in backend/callcompass/CLAUDE.md - US-004 and US-005 depend on it."
     },
     {
