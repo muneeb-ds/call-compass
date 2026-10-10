@@ -19,7 +19,7 @@
         "Tests pass"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Foundation story. Python 3.11+. Establishes the quality-check commands every later story must run: ruff check, mypy, pytest. Record those exact commands in a CLAUDE.md so later iterations do not have to rediscover them."
     },
     {

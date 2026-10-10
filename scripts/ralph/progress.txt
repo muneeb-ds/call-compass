@@ -1,3 +1,37 @@
 # Ralph Progress Log
 Started: Sat Oct 10 19:46:45 PKT 2026
 ---
+
+## Codebase Patterns
+- Quality checks run from `backend/` (config lives in `backend/pyproject.toml`), venv is at repo root:
+  `cd backend && ../.venv/bin/ruff check . && ../.venv/bin/mypy callcompass && ../.venv/bin/pytest`
+- mypy is **strict**: annotate every param and return type, including `-> None` on test functions.
+- Python 3.11 is the target. System `python3` is 3.10.8 — always use `.venv/bin/python` (uv-created, 3.11.13).
+- Untyped third-party imports need an `ignore_missing_imports` override block in `backend/pyproject.toml`.
+- Adding a runtime dep: edit `[project].dependencies`, then `cd backend && uv pip install --python ../.venv -e ".[dev]"`.
+- Work happens on branch `ralph/callcompass-mvp` (branched from `main`).
+- Full PRD detail (schemas, sample tree JSON, event payloads) is in `tasks/prd-callcompass-mvp.md` —
+  read the relevant section verbatim rather than inventing shapes.
+- Durable module-level knowledge goes in `backend/CLAUDE.md`; story-by-story notes go here.
+
+---
+
+## 2026-10-10 - US-001
+- Implemented the repo scaffold and wired up the three quality checks.
+- Files changed:
+  - `backend/pyproject.toml` (hatchling build, runtime + dev deps, ruff/mypy/pytest config)
+  - `backend/callcompass/__init__.py`, `backend/callcompass/main.py` (FastAPI `app` + temporary `/api/ping`)
+  - `backend/tests/test_app.py` (2 passing smoke tests via `TestClient`)
+  - `backend/CLAUDE.md`, `README.md`, `.gitignore`, `frontend/index.html`, `config/.gitkeep`
+- Verified: `ruff check .` clean, `mypy callcompass` clean (2 files), `pytest` 2 passed.
+  Also confirmed `uvicorn callcompass.main:app` boots and serves `/api/ping` 200.
+- **Learnings for future iterations:**
+  - `neudecide` IS a real PyPI package (publisher: neuphonic). It installed cleanly into the
+    venv along with `onnxruntime`, `sentencepiece`, `soxr`. US-003 can import it for real —
+    no need to stub it. Inspect its actual `generate()` signature before writing US-003.
+  - The repo already had a `.git` with a `main` branch containing one commit; `git init` was a
+    re-init. Don't assume an empty history.
+  - `fastapi.testclient.TestClient` needs `httpx`, which is already a dev dep.
+  - `/api/ping` in `main.py` is a placeholder — US-003 replaces/supplements it with `/api/health`.
+  - Pydantic installed is v2 (2.14.0): use `field_validator`/`model_validator`, not v1 APIs, in US-002.
+---
