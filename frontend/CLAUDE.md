@@ -8,7 +8,7 @@ every file must be valid in the browser as-is.
 
 ```bash
 node --check frontend/*.js                 # syntax only
-cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback,tree,analysis}.py
+cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback,tree,analysis,reset}.py
 ```
 
 `tests/test_frontend_audio.py` is the only automated coverage the audio pipeline has: it
@@ -96,13 +96,23 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `STOP_REASONS` is keyed by the exact `StopReason` literals in
   `callcompass/traversal.py` and `test_frontend_analysis.py` pins the two sets equal, so
   **adding a backend stop reason fails here until the UI has a sentence for it**.
+- `reset.js` — the Reset button. `resetAll({analysis, capture})` is the teardown and is
+  pure wiring, so its **order** is assertable from node: cancel the in-flight stream
+  *before* clearing, or a chunk already in flight repaints a node the tree just dimmed.
+  `ResetControl(button, onReset)` keeps its state in the DOM's own `disabled` — there is
+  no second copy — and `trigger()` is a no-op while disarmed. It is armed only by a
+  **finished** run (terminal event, `error` event, or a rejected upload) and disarmed by
+  its own press, which is what lets it stay live across a later run and cancel it.
 - `app.js` — page wiring only. Exports its entry points (`checkHealth`, `loadTree`,
   `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
   re-deriving. `wireCapture({onRecording})` returns
-  `{ recorder, waveform, timer, playback, toggle, latest }`; `onRecording` is **awaited inside
-  the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
-  traversal without inventing a second flag. `main()` returns `{ analysis, capture, loading }`
-  — US-016 should drive those rather than re-querying the DOM.
+  `{ recorder, waveform, timer, playback, toggle, reset, latest }`; `onRecording` is **awaited
+  inside the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
+  traversal without inventing a second flag. `wireAnalysis(loading, {onFinish})` reports a run
+  ending by **any** route through that one hook. `main()` returns
+  `{ analysis, result, capture, reset, loading }` — drive those rather than re-querying the DOM.
+  Teardown is never re-derived: `capture.reset()` and `Analysis.reset()` each own their half,
+  and a story that adds UI should clear it from the owning half or from `Analysis.onReset`.
 
 ## Looking at the UI without a browser
 

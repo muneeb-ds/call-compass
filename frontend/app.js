@@ -7,6 +7,7 @@
 import { Analysis } from "./analysis.js";
 import { MicrophoneError, Recorder } from "./capture.js";
 import { Playback } from "./playback.js";
+import { ResetControl, resetAll } from "./reset.js";
 import { ResultCard } from "./result.js";
 import { AnalyzeError } from "./sse.js";
 import { RecordingTimer } from "./timer.js";
@@ -185,6 +186,22 @@ export function wireCapture(hooks = {}) {
     }
   }
 
+  /**
+   * Back to the pre-recording state: no take, nothing to play, no message.
+   *
+   * Also discards a take still in progress. Reset can be armed by an earlier run while
+   * the operator is part way into the next one, and leaving the mic open there would
+   * keep the browser's recording indicator lit over an empty column.
+   */
+  function reset() {
+    if (recorder.recording) void recorder.stop();
+    recording = null;
+    playback.clear();
+    setCaptureMessage("");
+    settle();
+    timer.reset();
+  }
+
   button.addEventListener("click", () => void toggle());
   playback.button.addEventListener("click", () => playback.toggle());
   // Keeps the trace spanning the column when the window changes size while idle.
@@ -194,7 +211,7 @@ export function wireCapture(hooks = {}) {
   waveform.stop();
   timer.reset();
   /** Exposed for the later stories that need the captured bytes or the controls. */
-  return { recorder, waveform, timer, playback, toggle, latest: () => recording };
+  return { recorder, waveform, timer, playback, toggle, reset, latest: () => recording };
 }
 
 /**
@@ -205,10 +222,16 @@ export function wireCapture(hooks = {}) {
  * no tree drawn still produces trace cards and a total.
  *
  * @param {Promise<{view: TreeView, tree: object}|null>} loading the `loadTree()` promise
+ * @param {{onFinish?: () => void}} [hooks] `onFinish` is called once a run has ended by
+ *   any route — a terminal event, an `error` event, or a rejected upload — which is
+ *   what arms the Reset button. A cancelled run is not a finish and does not call it.
  * @returns {{analysis: Analysis, result: ResultCard,
  *            onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
  */
-export function wireAnalysis(loading) {
+export function wireAnalysis(loading, hooks = {}) {
+  const finished = () => {
+    if (hooks.onFinish) hooks.onFinish();
+  };
   const trace = new Trace(
     document.getElementById("trace-total"),
     document.getElementById("trace-list"),
@@ -223,10 +246,14 @@ export function wireAnalysis(loading) {
   analysis.onTerminal = (frame) => {
     if (frame.event === "completed") result.completed(frame.data, analysis.picks);
     if (frame.event === "unplaced") result.unplaced(frame.data, analysis.picks);
+    finished();
   };
   // An `error` event is a finished run, so it gets a card of its own rather than
   // leaving the result area on its pre-run empty state as if nothing had happened.
-  analysis.onError = (payload) => result.errored(payload);
+  analysis.onError = (payload) => {
+    result.errored(payload);
+    finished();
+  };
   void loading.then((loaded) => {
     if (loaded) analysis.view = loaded.view;
   });
@@ -240,7 +267,8 @@ export function wireAnalysis(loading) {
       // after it, so the UI reports it and stays usable rather than hanging.
       if (analysis.error) setCaptureMessage(analysis.error.message, "error");
     } catch (err) {
-      // An abort is a deliberate cancellation (Reset), not a failure to report.
+      // An abort is a deliberate cancellation (Reset), not a failure to report — and
+      // not a finish either: the UI has already been cleared.
       if (err.name === "AbortError") return;
       setCaptureMessage(
         err instanceof AnalyzeError
@@ -248,6 +276,9 @@ export function wireAnalysis(loading) {
           : `Analysis failed: ${err.message}`,
         "error",
       );
+      // A rejected upload still leaves a message and a recording on screen, so Reset
+      // has something to clear.
+      finished();
     }
   }
 
@@ -258,9 +289,18 @@ export function wireAnalysis(loading) {
 export function main() {
   checkHealth();
   const loading = loadTree();
-  const { analysis, result, onRecording } = wireAnalysis(loading);
+  // The teardown closes over both halves, so Reset is built first and the two are
+  // handed to it as they come into existence. It only ever runs on a click.
+  const reset = new ResetControl(
+    /** @type {HTMLButtonElement} */ (document.getElementById("reset-button")),
+    () => resetAll({ analysis, capture }),
+  );
+  const { analysis, result, onRecording } = wireAnalysis(loading, {
+    onFinish: () => reset.arm(),
+  });
   const capture = wireCapture({ onRecording });
-  return { analysis, result, capture, loading };
+  reset.button.addEventListener("click", () => reset.trigger());
+  return { analysis, result, capture, reset, loading };
 }
 
 main();

@@ -195,7 +195,10 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   a scripted fake model, captures the response body verbatim, and replays it into the shipped
   `sse.js`/`trace.js`/`analysis.js` — chopped into 1-, 7- and 64-byte chunks, because an SSE
   frame boundary can land anywhere in a network read. That is where a renamed event field
-  gets caught. All five skip if `node` is missing, so a green suite does not imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
+  gets caught — and by `tests/test_frontend_reset.py` (`tests/reset_fixture.mjs`), which
+  drives the shipped Reset control through **run → reset → run** over the same captured
+  body, because "the second run does not accumulate" is only observable as a sequence.
+  All six skip if `node` is missing, so a green suite does not imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
   one of those two tests** — that is the only place the two sides are checked against
   each other.
 

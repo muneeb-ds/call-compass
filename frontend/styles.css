@@ -150,7 +150,8 @@ body {
   flex: 1;
 }
 
-.placeholder.bottom {
+/* Pushes a slot to the foot of its column, whatever is above it. */
+.bottom {
   margin-top: auto;
 }
 
@@ -280,6 +281,34 @@ body {
   margin: 0;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* Reset. Deliberately a secondary, full-width control at the foot of the column: it is
+ * reached between takes, and must never compete with Record for the operator's eye
+ * mid-demo. Disabled until a run has finished, same as the playback control. */
+.reset-slot {
+  display: flex;
+}
+
+.reset {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reset:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.reset:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Decision tree. The SVG is laid out in its own viewBox units by tree.js and scaled

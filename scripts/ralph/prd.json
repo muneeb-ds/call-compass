@@ -289,7 +289,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Verify the non-accumulation criterion explicitly: run, reset, run again, and confirm the Trace column and total latency reflect only the second run."
     },
     {

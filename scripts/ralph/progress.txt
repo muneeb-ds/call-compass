@@ -100,6 +100,14 @@ Started: Sat Oct 10 19:46:45 PKT 2026
 - A UI module that renders a backend payload is wired through a **hook on `Analysis`**
   (`onTerminal` / `onError` / `onReset`), never by re-reading the stream or by `Analysis`
   touching the DOM itself.
+- A control's enabled/disabled state lives in the DOM's own `disabled` property, with
+  **no second copy** in the module (`ResetControl.armed` is a getter over it).
+- Teardown is **owned by the half that owns the state** (`Analysis.reset()`,
+  `capture.reset()`); a cross-cutting action composes those in a pure function whose
+  order is assertable, rather than re-deriving what to clear.
+- A behaviour that is only wrong **as a sequence** (two runs accumulating, a reset that
+  un-draws nothing) needs a fixture that performs the sequence. Single-snapshot
+  assertions pass on exactly the bug the story exists to prevent.
 
 ---
 
@@ -734,3 +742,69 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
   - `test_frontend_analysis.py` fixtures that POST to `/api/analyze` should be
     `scope="module"` (`happy_body`, `unplaced_body`, and now `error_body`); a per-test
     traversal is pure waste since the body is deterministic.
+---
+
+## 2026-10-11 - US-016
+- Implemented the Reset button: a secondary, full-width control pinned to the foot of
+  the Capture column. One click cancels any in-flight SSE stream, clears the recording,
+  the playback control, the waveform, the clock, the inline capture message, every node
+  and edge highlight plus the per-node annotations, the Trace column and its total, and
+  the result card — all without a page reload, so the tree is never re-fetched.
+- Files changed:
+  - `frontend/reset.js` (new): pure `resetAll({analysis, capture})` (the teardown, in the
+    one safe order — cancel *then* clear) and `ResetControl(button, onReset)` with
+    `arm()` / `disarm()` / `armed` / `trigger()`.
+  - `frontend/app.js`: `wireCapture()` gained a `reset()` (discards a take still in
+    progress so the mic indicator can't be left lit) and exposes it; `wireAnalysis` takes
+    an `onFinish` hook fired on a terminal event, an `error` event, or a rejected upload —
+    but **not** on an abort; `main()` builds the `ResetControl` and returns it.
+  - `frontend/index.html`: `#reset-slot` is a real `<button id="reset-button">`, shipping
+    `disabled` in the markup, replacing the US-008 placeholder.
+  - `frontend/styles.css`: `.reset-slot` / `.reset` (ghost outline, dim, `:disabled`
+    grayed), and `.placeholder.bottom` generalized to `.bottom`.
+  - `backend/tests/reset_fixture.mjs` + `backend/tests/test_frontend_reset.py` (new,
+    11 tests): node drives the shipped control through **run → reset → run** over a real
+    `/api/analyze` body, asserting the enablement sequence per frame, the full teardown,
+    non-accumulation across two runs, and the mid-flight cancel.
+  - `backend/tests/test_app.py` (`/reset.js` is served), `frontend/CLAUDE.md`,
+    `backend/CLAUDE.md`.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean
+  (14 files), `pytest` 179 passed (was 168). `node --check` clean on the changed JS.
+  Booted a live uvicorn with the fake engine: `/`, `/styles.css`, `/app.js`, `/reset.js`,
+  `/api/health` all 200 with the right content types, and the served HTML carries
+  `id="reset-button"`.
+- **Browser verification: NOT done — still no dev-browser/MCP browser tool here.**
+  Instead the Capture column was rendered from the shipped `index.html` markup with the
+  real `styles.css` inlined, in both Reset states, and rasterized with `qlmanage -t -s 900`:
+  the button sits flush at the foot of the column in both, reads as clearly secondary
+  beside the Record circle, and is visibly grayed when disarmed without the column
+  changing shape. A human should still click through run → reset → run on the real page.
+- **Reading of the two ACs that pull against each other:** "disabled before any run has
+  finished" is implemented literally, so during the *first* run the button is disabled —
+  which is harmless, because US-013 already disables Record for the whole traversal, so
+  there is nothing to interrupt. "Reset cancels any in-flight stream" is therefore
+  reachable from run 2 onward: the button stays armed after a run ends and is only
+  disarmed by its own press. `test_reset_cancels_an_in_flight_stream` exercises exactly
+  that state (`--arm-first`).
+- **Learnings for future iterations:**
+  - **Order matters in the teardown, and only a sequence test catches it.**
+    `analysis.cancel()` must precede `analysis.reset()`; reversed, a chunk already read
+    lights a node back up after the tree has been dimmed. That is why the teardown is a
+    pure exported function rather than three statements inside a click handler.
+  - An abort is **not** a finish: `onRecording`'s `AbortError` branch must return without
+    calling `onFinish`, or Reset re-arms itself immediately after clearing and the button
+    never returns to its initial state.
+  - Non-accumulation was already true before this story (`Analysis.run()` calls
+    `reset()` first), but nothing proved it. The new fixture runs the same body twice and
+    asserts the second run's cards/total/picks/annotations **equal** the first run's —
+    which is a stronger and more readable assertion than counting.
+  - A fixture that appends per-frame observations across several runs has to snapshot the
+    list between them (`armedPerFrameFirstRun`), or the second run silently doubles it.
+    Cost one failing assertion to notice.
+  - `qlmanage` can compare two states side by side in one image: duplicate the section
+    into a two-column grid with the attribute flipped. Cheaper than two renders, and the
+    difference is the thing being judged.
+  - `main()` builds `ResetControl` **before** `analysis` and `capture` exist and closes
+    over them; the `const` TDZ is fine because the closure only runs on a click. The
+    alternative (threading a controller through both wiring functions) would have put
+    teardown knowledge in three places.
