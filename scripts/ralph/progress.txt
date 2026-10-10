@@ -49,6 +49,14 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   quiet fix-up hides the upstream client bug (PRD R-5) instead of surfacing it.
 - Test fixtures are **generated, not checked in** (`tests/fakes.py::make_wav()`); keyword args
   build the invalid variants. No binary files in the repo.
+- A generator whose consumer must release it deterministically is annotated
+  `-> Generator[T, None, None]`, not `-> Iterator[T]` — `Iterator` has no `.close()` under
+  mypy strict. Never `yield` inside a `try/finally` that may be unwinding a `GeneratorExit`.
+- Blocking CPU work (`generate()`) is pumped through `asyncio.to_thread` one step at a time so
+  the event loop stays free. Testable without pytest-asyncio: `asyncio.run()` a drainer and
+  assert the loop's `threading.get_ident()` isn't among the idents the fake recorded.
+- The model warmup lives in `load_engine()`, not the lifespan handler, so tests injecting a
+  `model_loader` see **zero** warmup calls in `FakeModel.calls`.
 
 ---
 
@@ -239,3 +247,41 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   - Boundary durations 0.3 s and 30.0 s are **inclusive** (tested). 30 s of 16 kHz 16-bit mono is
     960 KB, comfortably under the 2 MB cap — the size limit only ever catches malformed bodies.
 ---
+
+## 2026-10-10 - US-007
+- Implemented the SSE traversal endpoint and `GET /api/tree`, completing the backend API.
+- Files changed:
+  - `backend/callcompass/stream.py` (new: `analyze_events`, `format_event`, `_advance`,
+    `_error_payload`, `SSE_MEDIA_TYPE`, `SSE_HEADERS`)
+  - `backend/callcompass/main.py` (`POST /api/analyze` streaming route, `GET /api/tree`)
+  - `backend/callcompass/traversal.py` (`traverse` now annotated `Generator[...]` rather than
+    `Iterator[...]`, so the stream layer can `.close()` it)
+  - `backend/pyproject.toml` (added `python-multipart`, required for the multipart upload)
+  - `backend/tests/fakes.py` (added `parse_sse()` and `FakeModel(fail_on_call=N)`)
+  - `backend/tests/test_analyze.py` (new: 15 tests / 20 cases — full happy-path and unplaced
+    event sequences, every documented payload's exact field set, `done`-is-last across three
+    scripts, mid-stream `error`, three audio 400s, same-buffer-at-every-node, off-loop
+    inference, and `/api/tree` verbatim round-trip)
+  - `backend/CLAUDE.md` (new "SSE streaming" section; warmup gotcha in "Tests")
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files; also clean over `tests`),
+  `pytest` 80 passed.
+- **Learnings for future iterations:**
+  - **`Iterator` has no `.close()`.** A generator function annotated `-> Iterator[T]` can't be
+    closed under mypy strict. Annotate `-> Generator[T, None, None]` when a consumer needs to
+    release the generator deterministically (which any streaming consumer does).
+  - **Never `yield` from inside a `try/finally` that may be unwinding a `GeneratorExit`.** The
+    `error`/`done` frames are emitted after the block for exactly this reason — doing it inside
+    raises and leaves the client hanging, which is the one failure the PRD forbids.
+  - FastAPI's `UploadFile` needs the `python-multipart` package; the failure is at route setup,
+    not per request, so it shows up as an import-time error in every test.
+  - The warmup is inside `load_engine()`, not the lifespan handler, so tests injecting a
+    `model_loader` see **zero** warmup calls. Two assertions here were initially written to skip
+    a leading warmup call and failed — now recorded in `backend/CLAUDE.md`.
+  - `tree.model_dump(exclude_none=True)` is **exactly** `json.loads(config/tree.json)` for the
+    sample tree (asserted). That equality is what makes "returns the config verbatim" testable;
+    adding a model field with a non-None default would break it.
+  - Thread offloading is directly testable without pytest-asyncio: `asyncio.run()` a coroutine
+    that drains `analyze_events` while the fake model records `threading.get_ident()`, then
+    assert the loop's own ident isn't among them.
+  - US-008 adds the static mount for `/`. Mount it **after** the `/api/*` routes so a catch-all
+    static route can't shadow them.

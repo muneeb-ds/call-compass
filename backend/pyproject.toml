@@ -10,6 +10,8 @@ dependencies = [
     "onnxruntime",
     "numpy",
     "pydantic",
+    # Required by FastAPI to parse the multipart/form-data upload on /api/analyze.
+    "python-multipart",
 ]
 
 [project.optional-dependencies]

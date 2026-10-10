@@ -10,16 +10,19 @@ dependencies so tests can boot the real app without downloading a 43 MB model.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated, Any
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .audio import AudioError
+from .audio import AudioError, decode_wav
 from .model import InferenceEngine, load_engine
+from .stream import SSE_HEADERS, SSE_MEDIA_TYPE, analyze_events
 from .tree import Tree, default_config_path, load_tree
 
 logger = logging.getLogger(__name__)
@@ -86,6 +89,37 @@ def create_app(
             model_load_ms=round(engine.load_ms),
             tree_id=tree.tree_id,
             node_count=tree.node_count,
+        )
+
+    @app.get("/api/tree")
+    async def get_tree() -> dict[str, Any]:
+        """The validated tree config, verbatim, for the static visualization.
+
+        `exclude_none` keeps optional fields (`prompt_hint`, `rationale`) absent when
+        the config omits them, so the response round-trips to the file's own JSON.
+        """
+        tree: Tree = app.state.tree
+        return tree.model_dump(exclude_none=True)
+
+    @app.post("/api/analyze")
+    async def analyze(audio: Annotated[UploadFile, File()]) -> StreamingResponse:
+        """Traverse the tree over one uploaded utterance, streaming each step as SSE.
+
+        The clock starts here so `total_latency_ms` is genuinely end-to-end. Decoding
+        happens before the response is constructed, so a rejected upload surfaces as
+        the app-wide `AudioError` 400 handler's JSON *before* the stream opens.
+        """
+        request_started = time.perf_counter()
+        decoded = decode_wav(await audio.read())
+        return StreamingResponse(
+            analyze_events(
+                decoded,
+                app.state.tree,
+                app.state.engine,
+                request_started=request_started,
+            ),
+            media_type=SSE_MEDIA_TYPE,
+            headers=SSE_HEADERS,
         )
 
     return app

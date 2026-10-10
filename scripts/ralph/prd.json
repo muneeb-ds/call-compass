@@ -132,7 +132,7 @@
         "Tests pass"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Last backend story - after this the API surface is complete and all remaining work is frontend. `done` must always be the final event, including after `error`."
     },
     {

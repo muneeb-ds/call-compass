@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -127,7 +127,7 @@ def traverse(
     tree: Tree,
     model: SpeechToolModel,
     max_steps: int = MAX_DEPTH,
-) -> Iterator[TraversalEvent]:
+) -> Generator[TraversalEvent, None, None]:
     """Walk `tree` from its root, one inference per branch node, over one buffer.
 
     Yields a `Step` per `generate()` call, then exactly one terminal event. `audio` is

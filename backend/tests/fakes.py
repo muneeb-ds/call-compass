@@ -8,6 +8,7 @@ list of responses, one per `generate()` call, and records what it was asked.
 from __future__ import annotations
 
 import io
+import json
 import math
 import wave
 from typing import Any
@@ -35,27 +36,55 @@ class FakeModel:
     `script` is one response per `generate()` call, in order. Each response is a list
     of tool calls — `[]` models an empty model response. Once the script runs out,
     every further call returns `[]`.
+
+    `fail_on_call` (1-indexed) makes that call raise instead, which is how a model
+    exception mid-traversal is exercised.
     """
 
     sample_rate = 16000
 
-    def __init__(self, script: list[list[ToolCall]] | None = None) -> None:
+    def __init__(
+        self, script: list[list[ToolCall]] | None = None, *, fail_on_call: int | None = None
+    ) -> None:
         self.script = list(script or [])
+        self.fail_on_call = fail_on_call
         #: One `(audio, tools)` pair per call, in call order.
         self.calls: list[tuple[Any, list[ToolSpec]]] = []
 
     def generate(self, audio: Any, tools: list[ToolSpec]) -> list[ToolCall]:
         self.calls.append((audio, tools))
+        if self.fail_on_call is not None and len(self.calls) == self.fail_on_call:
+            raise RuntimeError("onnxruntime session exploded")
         if not self.script:
             return []
         return self.script.pop(0)
 
 
 def fake_engine(
-    script: list[list[ToolCall]] | None = None, load_ms: float = 12.0
+    script: list[list[ToolCall]] | None = None,
+    load_ms: float = 12.0,
+    *,
+    fail_on_call: int | None = None,
 ) -> InferenceEngine:
     """An `InferenceEngine` wrapping a `FakeModel`, ready to hand to `create_app`."""
-    return InferenceEngine(FakeModel(script), load_ms=load_ms, providers=["CPUExecutionProvider"])
+    return InferenceEngine(
+        FakeModel(script, fail_on_call=fail_on_call),
+        load_ms=load_ms,
+        providers=["CPUExecutionProvider"],
+    )
+
+
+def parse_sse(body: str) -> list[tuple[str, dict[str, Any]]]:
+    """An SSE response body as `[(event name, data), ...]` in arrival order.
+
+    Deliberately strict: every frame must carry both an `event:` and a `data:` line,
+    so a malformed frame fails the test rather than being skipped.
+    """
+    frames: list[tuple[str, dict[str, Any]]] = []
+    for block in body.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        frames.append((lines["event"], json.loads(lines["data"])))
+    return frames
 
 
 def make_wav(

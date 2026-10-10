@@ -133,6 +133,31 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   must not pass it** — the default is the hard cap.
 - `latency_ms` times only `generate()`, via `time.perf_counter`, and is rounded to an int.
 
+## SSE streaming (`callcompass/stream.py`)
+
+- The **only** module that knows the `text/event-stream` wire format. `analyze_events(...)`
+  is an async generator of frames; `format_event(name, data)` builds one frame. Routes
+  construct a `StreamingResponse` over it with `SSE_MEDIA_TYPE` / `SSE_HEADERS`
+  (`X-Accel-Buffering: no`, so an intermediary can't coalesce the stream into one chunk and
+  destroy the per-node timing the demo exists to show).
+- Event order is fixed and **`done` is always last**, including after `error`. A client never
+  needs a timeout to know a run is over.
+- `traverse()` is pumped one `next()` at a time through `asyncio.to_thread`, so the blocking
+  `generate()` never runs on the event loop. `traverse` is annotated as a `Generator` (not
+  `Iterator`) specifically so `.close()` is available — the `finally` closes it on every exit
+  path, including a client disconnect arriving as `GeneratorExit`.
+- The `error` and `done` frames are yielded **outside** that `try/finally`: yielding while a
+  `GeneratorExit` is in flight raises, which would leave the connection hanging.
+- `total_latency_ms` is measured here (the route passes a `perf_counter()` reading taken on
+  arrival) and merged into the terminal payload, because traversal only knows inference time.
+- A failing node is named by tracking the *pending* node id — a `Step` is yielded only after
+  its `generate()` succeeded, so the pending node is the root or the last step's `next_node_id`.
+- `/api/analyze` takes `Annotated[UploadFile, File()]`, which needs the **`python-multipart`**
+  runtime dep. Without it FastAPI raises at import/route-setup time, not per request.
+- `tests/fakes.py::parse_sse(body)` parses a response body into `[(event, data), ...]` and is
+  deliberately strict — a frame missing `event:` or `data:` fails the test rather than being
+  skipped. `FakeModel(fail_on_call=N)` (1-indexed) exercises the mid-stream `error` path.
+
 ## Model loading (`callcompass/model.py`)
 
 - `load_engine()` constructs the model **once**, times it, logs the duration and execution
@@ -153,6 +178,9 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   `EMPTY_RESPONSE`. Extend these rather than writing a new double per story.
 - A traversal script is one `FakeModel` response per node, in order; once it runs out
   `generate()` returns `[]`, which traversal reads as `empty_response`.
+- The warmup lives in `load_engine()`, **not** in the lifespan handler, so an injected
+  `model_loader` runs no warmup. `FakeModel.calls` therefore contains only the calls a test's
+  own request made — don't write assertions that skip a leading warmup call.
 
 ## Dependencies
 
