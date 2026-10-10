@@ -222,7 +222,11 @@ export function wireAnalysis(loading) {
   analysis.onReset = () => result.clear();
   analysis.onTerminal = (frame) => {
     if (frame.event === "completed") result.completed(frame.data, analysis.picks);
+    if (frame.event === "unplaced") result.unplaced(frame.data, analysis.picks);
   };
+  // An `error` event is a finished run, so it gets a card of its own rather than
+  // leaving the result area on its pre-run empty state as if nothing had happened.
+  analysis.onError = (payload) => result.errored(payload);
   void loading.then((loaded) => {
     if (loaded) analysis.view = loaded.view;
   });

@@ -78,16 +78,24 @@ it can be pinned from pytest this way** — that is the only test runner this di
   artificial delays, ever; the real per-call timing is what the demo exists to show. The leaf
   gets no `step` of its own, so it lights on the terminal event. `onTerminal` / `onError` are
   the hooks US-014/US-015 should subscribe to rather than re-reading the stream, and
-  `reset()` / `cancel()` are what US-016's button calls. It also records every step's
+  `reset()` / `cancel()` are what US-016's button calls. An `error` event is a **finished**
+  run (the backend always sends `done` after it), so `onError` fires and the stream resolves
+  normally — never treat it as a throw or leave a spinner turning on it. It also records every step's
   `tool_called` in `picks`, which is the result card's breadcrumb — the card must not
   re-derive the path from the terminal event's `path` (those are node ids).
-- `result.js` — the result area. `breadcrumb(picks)` / `formatEndToEnd(ms)` are pure;
-  `ResultCard(container)` draws **only** from a terminal event, so an in-flight run can
-  never be read as a recommendation. The breadcrumb names the **chosen options**
-  (`humanize`d from `trace.js`), not the node labels, and the card's latency is
-  `total_latency_ms` (end to end) — deliberately a different number from the Trace
-  column's inference-only total, which is why it is labelled "end to end".
-  `clear()` is the empty state and is wired to `Analysis.onReset`.
+- `result.js` — the result area. `breadcrumb(picks)` / `formatEndToEnd(ms)` /
+  `reasonText(reason, label)` are pure; `ResultCard(container)` draws **only** from a
+  terminal event, so an in-flight run can never be read as a recommendation. The
+  breadcrumb names the **chosen options** (`humanize`d from `trace.js`), not the node
+  labels, and the card's latency is `total_latency_ms` (end to end) — deliberately a
+  different number from the Trace column's inference-only total, which is why it is
+  labelled "end to end". `clear()` is the empty state and is wired to `Analysis.onReset`.
+  There are **three** terminal looks — `completed` (green), `unplaced` (amber),
+  `errored` (red) — and they share one markup shape; the accent comes from the slot's
+  `data-state`, so a new state is a CSS block plus a method, never new markup.
+  `STOP_REASONS` is keyed by the exact `StopReason` literals in
+  `callcompass/traversal.py` and `test_frontend_analysis.py` pins the two sets equal, so
+  **adding a backend stop reason fails here until the UI has a sentence for it**.
 - `app.js` — page wiring only. Exports its entry points (`checkHealth`, `loadTree`,
   `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
   re-deriving. `wireCapture({onRecording})` returns

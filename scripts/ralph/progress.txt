@@ -94,6 +94,9 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   **The same works for HTML**: write a standalone `.html` with the real `styles.css`
   inlined and markup serialized from the shipped module, then `qlmanage -t` it. That is
   the closest thing to a visual check for a non-SVG UI story.
+- A frontend lookup keyed by a backend enum is **pinned to that enum from pytest**
+  (`STOP_REASONS` vs `typing.get_args(StopReason)`), and still needs a readable `??`
+  fallback so a new code degrades on screen instead of printing `undefined`.
 - A UI module that renders a backend payload is wired through a **hook on `Analysis`**
   (`onTerminal` / `onError` / `onReset`), never by re-reading the stream or by `Analysis`
   touching the DOM itself.
@@ -677,3 +680,57 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
   - US-015 draws into the same `#result-slot` — add an `unplaced(data)` method and a
     `data-state="unplaced"` CSS block to `result.js`, not a second container.
 ---
+
+## 2026-10-11 - US-015
+- Implemented the "Couldn't place this" state. On `unplaced` the result slot draws an
+  amber-accented card: the headline, the end-to-end latency badge, a plain-language
+  sentence naming the node it stopped on and why, and the breadcrumb of options that
+  *did* resolve. No recommendation line exists in this state. An `error` event now
+  draws a red "Run failed" card carrying the backend's message, so a broken run ends
+  in a readable state rather than looking like nothing happened.
+- Files changed:
+  - `frontend/result.js`: `UNPLACED_TITLE`, `ERROR_TITLE`, `STOP_REASONS`,
+    pure `reasonText(reason, label)`, and `ResultCard.unplaced()` / `.errored()`.
+    `completed()` was refactored onto the shared `card(title, latencyMs)` / `show(state, card)`
+    helpers so all three looks have one markup shape.
+  - `frontend/app.js`: `onTerminal` now handles `unplaced`; `onError` draws the error card.
+  - `frontend/styles.css`: `.result-slot[data-state="unplaced"]` / `["error"]` accent
+    blocks and `.result-reason`.
+  - `backend/tests/analysis_fixture.mjs` (wires `unplaced`/`errored` exactly as app.js
+    does; one result reader for all three states; reports `STOP_REASONS` and
+    `reasonText` for every code plus an unknown one),
+    `backend/tests/test_frontend_analysis.py` (5 new tests, `error_body` is now a
+    module fixture), `frontend/CLAUDE.md`.
+- The warning outline on the unresolved node and "earlier nodes stay lit" already
+  shipped in US-013 (`.tree-node[data-state="warning"]`: amber, dashed, 2px — distinct
+  from both visited and idle) and are still asserted by the existing tests.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean
+  (13 files), `pytest` 168 passed (was 163). `node --check` clean on the changed JS.
+- **Browser verification: NOT done — still no dev-browser/MCP browser tool here.**
+  Instead all four slot states were driven through the shipped `ResultCard` over a
+  serializing stub, written to a standalone HTML with the real `styles.css` inlined,
+  rasterized with `qlmanage -t -s 1120`, and inspected: green/amber/red left rules read
+  as three clearly different outcomes, the amber badge sits on the amber header row, the
+  reason sentence is the largest text in the unplaced card, and the empty slot is
+  unchanged. **US-015's note (record genuinely off-topic audio against the live backend)
+  still needs a human** — the model repo is gated here, so the `unplaced` path was
+  exercised through a real `/api/analyze` traversal with a scripted fake model instead.
+- **Learnings for future iterations:**
+  - **Pin a frontend enum to its backend literal type.** `STOP_REASONS`'s keys are
+    asserted equal to `typing.get_args(StopReason)`, so adding a fifth stop reason in
+    `traversal.py` fails the suite until the UI has a sentence for it. Cheap, and it is
+    the only kind of check that catches a silently-unexplained new state. Do the same
+    for any other closed set the two sides share.
+  - A lookup keyed by a backend code needs a `??` fallback that still reads as a
+    sentence — `STOP_REASONS[reason] ?? ...` — because the pin above fails in CI, not on
+    the projector, and the demo must degrade to "stopped here (new_code)" rather than
+    "undefined".
+  - Three terminal looks, **one** markup shape: `card()` builds the header + optional
+    latency badge and `show(state, card)` flips `data-state`, so each look is a CSS
+    block, not a second serializer branch in the test fixture. The fixture's result
+    reader became one function covering all three as a direct result.
+  - The `error` payload has no `total_latency_ms`, so the badge is conditional on
+    `typeof latencyMs === "number"` — not on truthiness, which would drop a genuine 0.
+  - `test_frontend_analysis.py` fixtures that POST to `/api/analyze` should be
+    `scope="module"` (`happy_body`, `unplaced_body`, and now `error_body`); a per-test
+    traversal is pure waste since the body is deterministic.

@@ -512,10 +512,48 @@ body {
   white-space: nowrap;
 }
 
+/* Declined: amber, and the same card shape as the recommendation so the result area
+ * does not jump. There is no `.result-recommendation` in this state at all — the
+ * reason line is the answer. */
+.result-slot[data-state="unplaced"] .result-card {
+  border-color: #6b531b;
+  border-left-color: var(--warn);
+  background: #1c1709;
+}
+
+.result-slot[data-state="unplaced"] .result-head,
+.result-slot[data-state="unplaced"] .result-latency {
+  color: var(--warn);
+}
+
+.result-slot[data-state="unplaced"] .result-latency {
+  background: #2b2109;
+}
+
+/* The run broke, as opposed to the model declining: red, so the two are never
+ * confused from the back of the room. */
+.result-slot[data-state="error"] .result-card {
+  border-color: #6b2320;
+  border-left-color: var(--error);
+  background: #1d1211;
+}
+
+.result-slot[data-state="error"] .result-head {
+  color: var(--error);
+}
+
 .result-recommendation {
   margin: 0.35rem 0 0;
   font-size: 1.25rem;
   line-height: 1.35;
+}
+
+/* Why the traversal stopped, or what failed. Larger than the rationale — in these two
+ * states it is the only explanation on screen. */
+.result-reason {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 /* The chosen options, in order — the conversation the model heard. */

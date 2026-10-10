@@ -272,7 +272,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Verify by recording genuinely off-topic audio (e.g. weather chat) against the live backend, not just by mocking the event. PRD AC-8 requires the real path."
     },
     {

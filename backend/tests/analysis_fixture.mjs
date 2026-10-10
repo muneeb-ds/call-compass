@@ -23,7 +23,8 @@ const load = (name) => import(pathToFileURL(join(frontend, name)).href);
 const { TreeView } = await load("tree.js");
 const { Trace } = await load("trace.js");
 const { Analysis, stepDetail } = await load("analysis.js");
-const { ResultCard, breadcrumb, formatEndToEnd } = await load("result.js");
+const { ResultCard, STOP_REASONS, breadcrumb, formatEndToEnd, reasonText } =
+  await load("result.js");
 const { AnalyzeError, SseDecoder, parseFrame } = await load("sse.js");
 
 const arg = (name, fallback) => {
@@ -135,7 +136,9 @@ let failure = null;
 analysis.onTerminal = (frame) => {
   terminal = frame.event;
   if (frame.event === "completed") result.completed(frame.data, analysis.picks);
+  if (frame.event === "unplaced") result.unplaced(frame.data, analysis.picks);
 };
+analysis.onError = (payload) => result.errored(payload);
 try {
   await analysis.run(new Uint8Array([1, 2, 3]), { fetchImpl: fakeFetch });
 } catch (err) {
@@ -183,22 +186,25 @@ process.stdout.write(
     picks: analysis.picks,
     resultEmpty,
     resultStates,
-    // What the recommendation card says, read back out of the stub elements.
+    // What the result card says, read back out of the stub elements. One reader for
+    // all three terminal looks, so "no recommendation on unplaced" is assertable.
     result: (() => {
       const state = resultEl.dataset.state;
       const el = resultEl.children[0];
+      if (state === "empty") return { state, empty: el.textContent };
       const text = (className) => {
-        const found = el.children && el.children.find((c) => c.className === className);
+        const found = el.children.find((c) => c.className === className);
         return found ? found.textContent : null;
       };
-      if (state !== "completed") return { state, empty: el.textContent };
       const head = el.children.find((c) => c.className === "result-head");
+      const badge = head.children[0] || null;
       return {
         state,
         label: head.textContent,
-        latency: head.children[0].textContent,
-        latencyClass: head.children[0].className,
+        latency: badge && badge.textContent,
+        latencyClass: badge && badge.className,
         recommendation: text("result-recommendation"),
+        reason: text("result-reason"),
         path: text("result-path"),
         rationale: text("result-rationale"),
       };
@@ -237,6 +243,14 @@ process.stdout.write(
       none: breadcrumb([]),
     },
     endToEnd: formatEndToEnd(497.6),
+    stopReasons: STOP_REASONS,
+    // Every backend reason code, plus one the UI has never heard of.
+    reasonText: Object.fromEntries(
+      [...Object.keys(STOP_REASONS), "something_new"].map((reason) => [
+        reason,
+        reasonText(reason, "Product interest"),
+      ]),
+    ),
     stepDetail: stepDetail({
       tool_called: "pricing_question",
       arguments: { pricing_focus: "plan_cost" },
