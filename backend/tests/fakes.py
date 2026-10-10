@@ -14,6 +14,17 @@ from callcompass.model import InferenceEngine, ToolCall, ToolSpec
 #: What the real model returns when nothing in the tool list applies.
 NONE_OF_THESE_CALL: list[ToolCall] = [{"name": "none_of_these", "arguments": {}}]
 
+#: An empty model response — a normal `generate()` result, not an error.
+EMPTY_RESPONSE: list[ToolCall] = []
+
+
+def picks(tool_name: str, **arguments: str) -> list[ToolCall]:
+    """One scripted `generate()` response choosing `tool_name`.
+
+    Keeps a traversal script readable: `[picks("pricing_question", pricing_focus="plan_cost")]`.
+    """
+    return [{"name": tool_name, "arguments": dict(arguments)}]
+
 
 class FakeModel:
     """A scripted stand-in for `neudecide.NeuDecide`.

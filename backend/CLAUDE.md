@@ -92,6 +92,27 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   round-trips a tool list through the real `neudecide.grammar.tool_parameters` to catch an
   upstream schema change. Update those assertions deliberately, not reflexively.
 
+## Traversal (`callcompass/traversal.py`)
+
+- `traverse(audio, tree, model, max_steps=MAX_DEPTH)` is a **generator**: it yields a `Step`
+  per `generate()` call, then **exactly one** terminal event (`Completed` or `Unplaced`), then
+  stops. Consume it lazily — the SSE endpoint's whole point is forwarding each step as its
+  inference returns.
+- All three event models are Pydantic and their **field names are the SSE payload**
+  (PRD "API Endpoints"). Each carries a literal `event` field, so the HTTP layer can use
+  `event.event` as the SSE event name and `model_dump()` as the data. Changing a field name
+  here changes the wire format — check the PRD first.
+- `total_latency_ms` is deliberately **not** on the terminal events. Traversal only knows
+  inference time (`total_inference_ms`); end-to-end latency belongs to the request layer,
+  which merges it into the payload.
+- The **tool name alone decides the branch.** An argument value outside the declared `enum`
+  is logged and passed through, not treated as a failure — the enum is advisory at the
+  grammar level and the argument is only descriptive detail in the trace.
+- Only `calls[0]` is used; the model may return several tool calls but a node takes one branch.
+- `max_steps` exists so tests can hit `depth_limit` on the 4-level sample tree. **Production
+  must not pass it** — the default is the hard cap.
+- `latency_ms` times only `generate()`, via `time.perf_counter`, and is rounded to an int.
+
 ## Model loading (`callcompass/model.py`)
 
 - `load_engine()` constructs the model **once**, times it, logs the duration and execution
@@ -107,8 +128,11 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
 ## Tests
 
 - `tests/` is a package (`tests/__init__.py`), so share fixtures via `from .fakes import ...`.
-- `tests/fakes.py` holds `FakeModel` (a scripted `generate()` that records its `calls`) and
-  `fake_engine()`. Extend these rather than writing a new double per story.
+- `tests/fakes.py` holds `FakeModel` (a scripted `generate()` that records its `calls`),
+  `fake_engine()`, and the script helpers `picks(tool, **args)`, `NONE_OF_THESE_CALL`,
+  `EMPTY_RESPONSE`. Extend these rather than writing a new double per story.
+- A traversal script is one `FakeModel` response per node, in order; once it runs out
+  `generate()` returns `[]`, which traversal reads as `empty_response`.
 
 ## Dependencies
 

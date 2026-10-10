@@ -36,6 +36,11 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   guard against an upstream schema change, and needs no model or network.
 - Return **copies** of values read off loaded Pydantic models (`list(x.enum)`), so a
   caller mutating a returned dict can't corrupt the process-wide loaded config.
+- Traversal/SSE event payloads are **Pydantic models whose field names are the wire format**
+  (see `traversal.py`). `event.event` is the SSE event name, `model_dump()` is the data.
+  Check the PRD's "API Endpoints" section before renaming any field.
+- Generators are the unit of streaming: compute lazily and yield, so the HTTP layer can
+  forward each result the moment it exists rather than buffering a whole run.
 - Messages that embed a third-party exception must collapse it with `" ".join(str(exc).split())`
   — upstream errors (e.g. HF's `GatedRepoError`) are multi-line and bury the actionable hint.
 
@@ -164,4 +169,34 @@ Started: Sat Oct 10 19:46:45 PKT 2026
     US-005 must verify the returned argument value is in the option's `enum` itself.
   - `Tree.branch(node_id)` + `isinstance(node, BranchNode)` for whole-tree sweeps is the
     established way to walk branch nodes; no new traversal helper was needed here.
+---
+
+## 2026-10-10 - US-005
+- Implemented the traversal engine as a lazy generator plus its fake-model test suite.
+- Files changed:
+  - `backend/callcompass/traversal.py` (new: `traverse`, `Step`, `Completed`, `Unplaced`,
+    `TraversalEvent`, `StopReason`, `_find_option`, `_arguments`, `_unplaced`)
+  - `backend/tests/test_traversal.py` (new: 14 tests, all against the real `config/tree.json`)
+  - `backend/tests/fakes.py` (added `picks(tool, **args)` and `EMPTY_RESPONSE` script helpers)
+  - `backend/CLAUDE.md` (new "Traversal" section; expanded "Tests")
+- Verified: `ruff check .` clean, `mypy callcompass` clean (6 files), `pytest` 50 passed.
+- **Learnings for future iterations:**
+  - `traverse()` yields `Step` per inference then **exactly one** terminal event, so US-007
+    can map `event.event` straight onto the SSE event name and `model_dump()` onto `data`.
+    No separate "get the outcome" call — the terminal event is the last thing yielded.
+  - `total_latency_ms` is intentionally absent from `Completed`/`Unplaced`. Traversal only
+    knows `total_inference_ms`; US-007 owns the request clock and must merge
+    `{"total_latency_ms": ...}` into the dumped payload.
+  - The depth cap is reachable in tests only via the `max_steps` parameter — the sample tree
+    is 4 levels deep and cycles are rejected by the loader, so a 10-step runaway can't be
+    constructed from config. Production code must leave `max_steps` at its default.
+  - Decided an out-of-enum argument value is **not** a traversal failure: the four PRD-allowed
+    `unplaced` reasons don't cover it, the branch is chosen by `tool_name` alone, and the
+    argument is descriptive trace detail. It's logged at WARNING and passed through.
+  - A tool belonging to a *different* node (e.g. `budget_objection` returned at `intent`)
+    falls out naturally as `unknown_tool`, since option lookup is per node. Worth keeping a
+    test on — it's the behaviour that makes per-node tool lists meaningful.
+  - `inference_count` counts `generate()` calls actually made, so an `unplaced` on a failed
+    call includes that call (matches the PRD's example: 2 at `product_interest`). On
+    `depth_limit` the capped call is never issued.
 ---

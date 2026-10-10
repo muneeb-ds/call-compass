@@ -93,7 +93,7 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Implement as a generator so US-007 can stream steps as they occur. The fake model (scripted list of responses) is the key test fixture - put it somewhere reusable, US-007's integration test needs it too."
     },
     {
