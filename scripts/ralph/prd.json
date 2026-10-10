@@ -38,7 +38,7 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Copy the sample tree JSON exactly from the PRD's 'Sample Tree Config' section. Note the tree is NOT uniform depth: rec_graceful_exit is a level-2 leaf reached after one inference. Every later story must handle varying depth."
     },
     {

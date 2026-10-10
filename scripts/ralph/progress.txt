@@ -13,6 +13,13 @@ Started: Sat Oct 10 19:46:45 PKT 2026
 - Full PRD detail (schemas, sample tree JSON, event payloads) is in `tasks/prd-callcompass-mvp.md` —
   read the relevant section verbatim rather than inventing shapes.
 - Durable module-level knowledge goes in `backend/CLAUDE.md`; story-by-story notes go here.
+- Domain errors are typed exceptions with **single-line** messages naming the offending entity
+  (see `TreeConfigError`). Don't let `pydantic.ValidationError` escape a module boundary.
+- Pydantic models use `extra="forbid"` + discriminated unions on a `type` field.
+- Load the tree via `callcompass.tree.load_tree(default_config_path())` — never re-read or
+  re-shape `config/tree.json` by hand.
+- `config/tree.json` must stay byte-equivalent (as JSON) to the PRD's "Sample Tree Config".
+  Verify with a short `json.loads` comparison against the PRD markdown rather than by eye.
 
 ---
 
@@ -34,4 +41,34 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   - `fastapi.testclient.TestClient` needs `httpx`, which is already a dev dep.
   - `/api/ping` in `main.py` is a placeholder — US-003 replaces/supplements it with `/api/health`.
   - Pydantic installed is v2 (2.14.0): use `field_validator`/`model_validator`, not v1 APIs, in US-002.
+---
+
+## 2026-10-10 - US-002
+- Implemented the tree config schema, Pydantic models, and validating loader.
+- Files changed:
+  - `config/tree.json` (the complete `northbeam-saas-v1` sample tree, verified JSON-identical
+    to the PRD's "Sample Tree Config" block)
+  - `backend/callcompass/tree.py` (`ArgumentSpec`, `Option`, `BranchNode`, `LeafNode`, `Tree`,
+    `TreeConfigError`, `parse_tree`, `load_tree`, `default_config_path`, `NONE_OF_THESE`)
+  - `backend/tests/test_tree.py` (18 tests: 1 valid tree + 11 distinct invalid trees +
+    loader/sample-tree coverage)
+  - `backend/CLAUDE.md` (new "Tree config" section)
+- Verified: `ruff check .` clean, `mypy callcompass` clean (3 files), `pytest` 20 passed.
+- **Learnings for future iterations:**
+  - Pydantic v2 catches `ValueError`/`AssertionError` in validators and wraps them in a
+    `ValidationError`, but lets **other** exception types propagate untouched. That's how
+    `TreeConfigError` escapes nested validators with a clean single-line message. Validators
+    that know the node id raise `TreeConfigError`; the ones that don't (e.g. `Option`) raise
+    `ValueError` so Pydantic's `loc` can supply the id in `_single_line`.
+  - A duplicate node id in JSON is invisible after `json.loads` (dicts dedupe). Needed an
+    `object_pairs_hook` to catch it. Any future config file needs the same treatment.
+  - `Field(min_length=1)` on a `list[str]` is how "enum must be non-empty" is enforced
+    structurally — no custom validator needed. Same trick for `options` and `nodes`.
+  - Cycle detection walks **every** node, not just those reachable from `root`, so an
+    unreachable cycle is still an error.
+  - `default_config_path()` is `Path(__file__).resolve().parents[2] / "config" / "tree.json"`.
+    If the package is ever moved, that index changes — it's the one path assumption here.
+  - `Tree.branch(node_id)` is the typed accessor for branch nodes; US-004/US-005 should use it
+    instead of `isinstance` checks scattered around.
+  - The sample tree has 8 nodes (3 branch, 5 leaf) — useful for US-003's `node_count` assertion.
 ---

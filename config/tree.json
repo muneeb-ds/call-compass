@@ -1,0 +1,178 @@
+{
+  "tree_id": "northbeam-saas-v1",
+  "version": "1.0.0",
+  "product": "Northbeam Analytics (B2B SaaS subscription)",
+  "root": "intent",
+  "nodes": {
+    "intent": {
+      "id": "intent",
+      "type": "branch",
+      "label": "Customer intent",
+      "level": 1,
+      "prompt_hint": "What is the customer fundamentally doing in this utterance?",
+      "options": [
+        {
+          "tool_name": "pricing_question",
+          "description": "The customer is asking about price, plans, billing, or what a tier costs.",
+          "argument": {
+            "name": "pricing_focus",
+            "enum": ["plan_cost", "billing_terms", "discount"],
+            "description": "The specific pricing concern raised."
+          },
+          "next": "product_interest"
+        },
+        {
+          "tool_name": "feature_question",
+          "description": "The customer is asking what the product does or whether it supports something.",
+          "argument": {
+            "name": "feature_area",
+            "enum": ["dashboards", "integrations", "data_export"],
+            "description": "The capability the customer asked about."
+          },
+          "next": "product_interest"
+        },
+        {
+          "tool_name": "not_interested",
+          "description": "The customer is declining, deflecting, or asking to be left alone.",
+          "argument": {
+            "name": "decline_tone",
+            "enum": ["firm", "soft", "defer_to_later"],
+            "description": "How firmly the customer is declining."
+          },
+          "next": "rec_graceful_exit"
+        }
+      ]
+    },
+
+    "product_interest": {
+      "id": "product_interest",
+      "type": "branch",
+      "label": "Product interest",
+      "level": 2,
+      "prompt_hint": "Which tier does the customer's described scale and need point to?",
+      "options": [
+        {
+          "tool_name": "starter_tier",
+          "description": "Small team, single product, light usage; fits the Starter plan.",
+          "argument": {
+            "name": "team_size_signal",
+            "enum": ["solo", "small_team"],
+            "description": "Indicated team size."
+          },
+          "next": "signal_check"
+        },
+        {
+          "tool_name": "pro_tier",
+          "description": "Growing team wanting integrations, collaboration, or multiple products; fits Pro.",
+          "argument": {
+            "name": "growth_signal",
+            "enum": ["scaling_team", "multi_product", "needs_integrations"],
+            "description": "What indicates Pro-tier need."
+          },
+          "next": "signal_check"
+        },
+        {
+          "tool_name": "enterprise_tier",
+          "description": "Large org raising security, compliance, SSO, procurement, or custom contracts.",
+          "argument": {
+            "name": "enterprise_driver",
+            "enum": ["security_review", "sso_required", "procurement_process"],
+            "description": "The enterprise requirement mentioned."
+          },
+          "next": "signal_check"
+        }
+      ]
+    },
+
+    "signal_check": {
+      "id": "signal_check",
+      "type": "branch",
+      "label": "Objection or buying signal",
+      "level": 3,
+      "prompt_hint": "Is the customer pushing back, or leaning in?",
+      "options": [
+        {
+          "tool_name": "budget_objection",
+          "description": "The customer says it is too expensive or that budget is not available.",
+          "argument": {
+            "name": "budget_blocker",
+            "enum": ["too_expensive", "no_budget_this_quarter", "needs_approval"],
+            "description": "The nature of the budget obstacle."
+          },
+          "next": "rec_budget"
+        },
+        {
+          "tool_name": "timing_objection",
+          "description": "The customer is interested but says now is not the right time.",
+          "argument": {
+            "name": "timing_blocker",
+            "enum": ["mid_project", "next_quarter", "team_change"],
+            "description": "Why the timing is wrong."
+          },
+          "next": "rec_timing"
+        },
+        {
+          "tool_name": "competitor_objection",
+          "description": "The customer mentions an incumbent or alternative tool they already use or prefer.",
+          "argument": {
+            "name": "competitor_stance",
+            "enum": ["already_using", "evaluating_both", "contract_locked"],
+            "description": "Their relationship with the alternative."
+          },
+          "next": "rec_competitor"
+        },
+        {
+          "tool_name": "buying_signal",
+          "description": "The customer is moving forward: asking about next steps, trials, demos, or onboarding.",
+          "argument": {
+            "name": "readiness",
+            "enum": ["wants_trial", "wants_demo", "ready_to_buy"],
+            "description": "How ready they are to proceed."
+          },
+          "next": "rec_advance"
+        }
+      ]
+    },
+
+    "rec_budget": {
+      "id": "rec_budget",
+      "type": "leaf",
+      "label": "Reframe on value",
+      "level": 4,
+      "recommendation": "Acknowledge the budget constraint, then move the conversation from price to cost-of-delay: ask what they currently spend in analyst hours pulling these numbers by hand. Offer the lower tier as a starting point rather than discounting the one they asked about.",
+      "rationale": "A budget objection is rarely about the number; it is about unproven value. Shrink the commitment instead of the price."
+    },
+    "rec_timing": {
+      "id": "rec_timing",
+      "type": "leaf",
+      "label": "Secure a dated follow-up",
+      "level": 4,
+      "recommendation": "Agree that timing matters and do not push for a decision now. Pin down a specific date to revisit, and ask what needs to be true by then. Offer to send a short summary they can forward internally in the meantime.",
+      "rationale": "Timing objections are usually genuine. The win here is a dated next step, not a close."
+    },
+    "rec_competitor": {
+      "id": "rec_competitor",
+      "type": "leaf",
+      "label": "Differentiate, do not attack",
+      "level": 4,
+      "recommendation": "Do not criticize the tool they already use. Ask what it does well and where it falls short, then speak only to that gap. If they are locked into a contract, offer to run a parallel pilot so there is evidence ready at renewal.",
+      "rationale": "Attacking an incumbent attacks their past decision. Finding the gap gives them a reason to add you without admitting a mistake."
+    },
+    "rec_advance": {
+      "id": "rec_advance",
+      "type": "leaf",
+      "label": "Advance to next step now",
+      "level": 4,
+      "recommendation": "They are leaning in — stop selling and start scheduling. Confirm the tier, name the next concrete step, and get it on the calendar before the call ends. Ask who else needs to be in the room.",
+      "rationale": "A buying signal has a short shelf life. Converting it into a scheduled commitment on the call is the whole job."
+    },
+    "rec_graceful_exit": {
+      "id": "rec_graceful_exit",
+      "type": "leaf",
+      "label": "Exit cleanly",
+      "level": 2,
+      "recommendation": "Thank them for their time and close without pressure. Ask one short question about whether the timing or the fit is the issue, accept the answer, and leave the door open for later.",
+      "rationale": "A clean exit preserves the option of a future conversation. Pressing a firm no destroys it."
+    }
+  }
+}

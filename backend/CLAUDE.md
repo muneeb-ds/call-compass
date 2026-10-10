@@ -22,6 +22,27 @@ cd backend
 - Tests live in `backend/tests/` and import the package as `callcompass.*` (editable install).
 - Run the server from `backend/`: `../.venv/bin/uvicorn callcompass.main:app --reload`.
 
+## Tree config (`callcompass/tree.py`)
+
+- `tree.py` is the **only** module that knows the config file's shape. Downstream code consumes
+  `Tree` / `BranchNode` / `LeafNode`, never raw dicts.
+- Entry points: `parse_tree(text)`, `load_tree(path)`, `default_config_path()` (resolves
+  `config/tree.json` from the repo root, two parents up from the package).
+- All config failures surface as **`TreeConfigError` with a single-line message naming the
+  offending node id**. Never let a raw `pydantic.ValidationError` escape — `parse_tree` catches
+  and collapses it via `_single_line`.
+- Validators that know their node id raise `TreeConfigError` directly (Pydantic propagates
+  non-`ValueError` exceptions untouched); validators that don't raise `ValueError` and let
+  Pydantic's `loc` supply the node id.
+- Node models are a **discriminated union on `type`** and all models are `extra="forbid"`, so a
+  typo'd field is an error rather than silently ignored.
+- `NONE_OF_THESE = "none_of_these"` lives here and is **backend-injected at inference time**;
+  the loader rejects any config that declares it. US-004's tool conversion must add it.
+- The sample tree is **not uniform depth** (`rec_graceful_exit` is a level-2 leaf). Anything
+  that walks or lays out the tree must handle varying depth.
+- Duplicate node ids are caught by a `json.loads` `object_pairs_hook` — a plain dict would
+  silently dedupe them, so parse config text through `parse_tree`, not `json.loads`.
+
 ## Dependencies
 
 - Adding a runtime dep means editing `[project].dependencies` in `backend/pyproject.toml`,
