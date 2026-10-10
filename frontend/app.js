@@ -1,9 +1,10 @@
 // CallCompass demo shell.
 //
-// Shell-only for now: the single job is to tell the operator, before they start
-// talking to an audience, whether the backend actually came up with a model and a
-// tree. Everything else on the page is a labelled placeholder that later stories
-// replace. No bundler, no build step — this is loaded directly as an ES module.
+// Wires the health check and the capture pipeline. Everything else on the page is
+// still a labelled placeholder that a later story replaces. No bundler, no build
+// step — this is loaded directly as an ES module.
+
+import { MicrophoneError, Recorder } from "./capture.js";
 
 /** @param {string} text @param {"loading"|"ready"|"error"} state */
 function setStatus(text, state) {
@@ -41,4 +42,105 @@ export async function checkHealth() {
   }
 }
 
+/**
+ * Shows or clears the Capture column's inline message.
+ *
+ * Capture problems are always reported here. Never alert(), and never a silent
+ * failure: an operator standing in front of an audience needs to see on screen that
+ * the mic was denied.
+ *
+ * @param {string} text empty to hide
+ * @param {"error"|"info"} [state]
+ */
+function setCaptureMessage(text, state = "error") {
+  const el = document.getElementById("capture-message");
+  el.textContent = text;
+  el.dataset.state = state;
+  el.hidden = text === "";
+}
+
+/**
+ * Sends the encoded WAV to the backend to confirm the format is accepted.
+ *
+ * Deliberately throws the response away: this story only establishes that the
+ * client-side encoding satisfies the backend's validation. US-013 replaces this with
+ * consuming the SSE stream.
+ *
+ * @param {Uint8Array} bytes
+ * @returns {Promise<string>} a message for the Capture column
+ */
+export async function verifyAccepted(bytes) {
+  const body = new FormData();
+  body.append("audio", new Blob([bytes], { type: "audio/wav" }), "utterance.wav");
+  const controller = new AbortController();
+  try {
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      body,
+      signal: controller.signal,
+    });
+    if (response.status === 400) {
+      const { detail } = await response.json();
+      return `Backend rejected the audio: ${detail}`;
+    }
+    return "";
+  } finally {
+    // The traversal stream itself is not this story's concern; drop it rather than
+    // leaving a half-read response open.
+    controller.abort();
+  }
+}
+
+/** Wires the Capture column's record button to the recorder. */
+export function wireCapture() {
+  const button = document.getElementById("record-button");
+  const recorder = new Recorder();
+  /** @type {import("./capture.js").Recording|null} */
+  let recording = null;
+
+  /** @param {boolean} isRecording */
+  function render(isRecording) {
+    button.textContent = isRecording ? "Stop" : "Record";
+    button.dataset.recording = String(isRecording);
+    button.setAttribute("aria-pressed", String(isRecording));
+  }
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      if (recorder.recording) {
+        recording = await recorder.stop();
+        render(false);
+        const problem = recording ? await verifyAccepted(recording.bytes) : "";
+        if (problem) {
+          setCaptureMessage(problem, "error");
+        } else if (recording) {
+          setCaptureMessage(
+            `Captured ${(recording.durationMs / 1000).toFixed(1)}s · ` +
+              `${recording.bytes.length} bytes · ${recording.sampleRate} Hz mono`,
+            "info",
+          );
+        }
+      } else {
+        setCaptureMessage("");
+        await recorder.start();
+        render(true);
+      }
+    } catch (err) {
+      render(false);
+      setCaptureMessage(
+        err instanceof MicrophoneError ? err.message : `Recording failed: ${err.message}`,
+        "error",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  render(false);
+  /** Exposed for the later stories that need the captured bytes. */
+  return { recorder, latest: () => recording };
+}
+
 checkHealth();
+wireCapture();

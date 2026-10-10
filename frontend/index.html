@@ -16,7 +16,12 @@
     <main class="layout">
       <section class="column capture" aria-labelledby="capture-heading">
         <h2 id="capture-heading">Capture</h2>
-        <div class="placeholder" id="record-slot">Record button</div>
+        <div class="record-slot" id="record-slot">
+          <button type="button" id="record-button" class="record" aria-pressed="false">
+            Record
+          </button>
+        </div>
+        <p class="message" id="capture-message" data-state="error" role="status" hidden></p>
         <div class="placeholder" id="waveform-slot">Waveform</div>
         <div class="placeholder mono" id="timer-slot">0:00 / 0:30</div>
         <div class="placeholder" id="playback-slot">Playback</div>

@@ -168,7 +168,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "The highest-risk frontend story (PRD R-5): a subtly wrong WAV header or sample rate produces confidently wrong model output rather than an error. Verify acceptance by actually POSTing to the live backend and confirming no 400. Target Chrome/Edge."
     },
     {

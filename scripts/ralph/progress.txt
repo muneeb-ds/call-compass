@@ -61,7 +61,15 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   registered **after** `create_app()` returns are shadowed and answer 405. Re-append the mount
   (`app.router.routes`) if you add one.
 - `frontend/` is vanilla ES modules with no bundler, no node_modules, and **no JS typecheck or
-  lint**. Its only automated coverage is the backend's static-serving tests.
+  lint**. Checks available: `node --check frontend/*.js`, plus the backend's serving tests.
+  See `frontend/CLAUDE.md` for the module layout and conventions.
+- **JS logic that must match a backend contract is tested from pytest by running the shipped
+  JS under node** (`tests/encode_fixture.mjs` + `tests/test_frontend_audio.py`) and asserting
+  against the real Python decoder/endpoint. Reach for this instead of adding a JS test runner.
+- Frontend failures are reported **inline in the column they belong to** (`#capture-message`),
+  never `alert()` and never a silent catch.
+- `frontend/app.js` **exports** its entry points (`checkHealth`, `wireCapture`) and calls them
+  at the bottom, so a later story can reuse them rather than re-deriving the wiring.
 
 ---
 
@@ -330,4 +338,66 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
     this story was already written.
   - Running the real app needs the gated model; to exercise the server by hand, write a throwaway
     module that does `create_app(model_loader=fake_engine)` and point uvicorn at it.
+---
+
+## 2026-10-10 - US-009
+- Implemented browser microphone capture and fully client-side 16 kHz mono 16-bit PCM WAV
+  encoding, plus the automated cross-check that the bytes are accepted by the backend.
+- Files changed:
+  - `frontend/wav.js` (new): `encodeWav`, `concatChunks`, `SAMPLE_RATE`, `BYTES_PER_SAMPLE`.
+    Pure (no DOM/AudioContext) so node can run it.
+  - `frontend/recorder-worklet.js` (new): `AudioWorkletProcessor` registered as `recorder`,
+    with a self-contained streaming linear resampler (`createResampler`) and `downmix`.
+  - `frontend/capture.js` (new): `Recorder` (start/stop/release, exposes `analyser` for
+    US-010) and `MicrophoneError` with per-DOMException-name operator-readable messages.
+  - `frontend/app.js`: added `wireCapture()`, `verifyAccepted()`, `setCaptureMessage()`.
+  - `frontend/index.html`, `frontend/styles.css`: circular record button in `#record-slot`,
+    inline `#capture-message`, `data-recording` styling.
+  - `frontend/CLAUDE.md` (new), `backend/CLAUDE.md` (pointer to it + the node harness).
+  - `backend/tests/encode_fixture.mjs` (new), `backend/tests/test_frontend_audio.py` (new,
+    13 tests).
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean,
+  `pytest` 97 passed (was 84). `node --check` clean on all four JS files. Booted a live
+  uvicorn with the fake engine: `/`, `/app.js`, `/capture.js`, `/wav.js`,
+  `/recorder-worklet.js`, `/api/health` all 200 with the right content types.
+- **AC "POSTing the encoded WAV is accepted (no HTTP 400)" is verified for real**, not
+  mocked: node runs the shipped encoder + worklet resampler at 8/16/44.1/48 kHz source
+  rates and the bytes are POSTed to `/api/analyze` through `TestClient` → 200
+  `text/event-stream` every time, and `decode_wav` accepts them at the 0.3 s and 30 s
+  duration bounds.
+- **Browser verification: NOT done — no dev-browser/MCP browser tool in this environment.**
+  Manual check still needed: press Record over `http://localhost`, confirm the mic prompt,
+  that the button turns red, and that stopping shows the byte/duration readout rather than
+  a rejection. Also worth checking the deny path (block the mic in site settings).
+- **Learnings for future iterations:**
+  - **An AudioWorklet module is a classic script, not an ES module** — `addModule()` gives
+    it no `import`. Anything it needs must be inlined, which is why the resampler lives in
+    `recorder-worklet.js` rather than in `wav.js`. Keeping its helpers at top level and free
+    of worklet globals is what makes them loadable from node.
+  - The node harness trick: read the worklet source and `new Function("AudioWorkletProcessor",
+    "registerProcessor", "sampleRate", src + "\nreturn createResampler;")`. Stubs the three
+    globals and hands back the real function. Use the same approach for any future worklet.
+  - Dynamic `import()` of a bare absolute path is deprecated in node — wrap it in
+    `pathToFileURL(...).href`.
+  - **Streaming resampling needs leftover carried between blocks.** `position` can land past
+    the end of the current buffer when downsampling (ratio 3 at 48 kHz), so `consumed` is
+    clamped to `buffer.length` and the remainder stays in `position`. Without that clamp the
+    integer skip is lost and the output drifts.
+  - A byte-level assertion is not enough for audio: the FFT test (dominant frequency still
+    220 Hz, peak still 0.5) is what would catch a resampler that drops or duplicates
+    samples, since such output still decodes fine and still yields a confident wrong answer.
+  - Exactly one sample can remain pending in the resampler when recording stops (the
+    interpolator needs `buffer[i+1]`), so a 1 s recording is 15999 or 16000 samples. Any
+    duration assertion needs a ±1 ms tolerance.
+  - `-1.0` must encode to `-32768`, not `-32767`: `audio.py` divides by 32768. Hence the
+    asymmetric `clamped < 0 ? * 0x8000 : * 0x7fff`.
+  - Both `{ sampleRate: 16000 }` on `AudioContext` and `{ channelCount: 1 }` on
+    `getUserMedia` are **advisory** — the browser may ignore either. The worklet therefore
+    always downmixes and always resamples from its own `sampleRate`.
+  - `app.js` now POSTs on stop purely to assert the format is accepted and aborts the
+    stream immediately (`verifyAccepted`). **US-013 should replace that function** with the
+    real SSE consumption rather than adding a second POST path.
+  - A stale uvicorn from an earlier iteration was still holding port 8077. Check
+    `lsof -ti:<port>` before concluding a manual server check succeeded — the 200s were
+    coming from the old process.
 ---

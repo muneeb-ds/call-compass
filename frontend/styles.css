@@ -157,3 +157,55 @@ body {
 .mono {
   font-family: var(--mono);
 }
+
+/* Record control. The recording state is carried on `data-recording` so the button's
+ * look follows the recorder's actual state rather than a separate CSS class. */
+.record-slot {
+  display: grid;
+  place-items: center;
+  padding: var(--gap);
+}
+
+.record {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 50%;
+  border: 2px solid var(--panel-border);
+  background: #1f2630;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.record:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.record:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.record[data-recording="true"] {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+/* Inline capture feedback: a denied mic or a rejected upload is reported here, in
+ * the column it belongs to. Never an alert(). */
+.message {
+  margin: 0;
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+.message[data-state="error"] {
+  color: var(--error);
+}
+
+.message[data-state="info"] {
+  color: var(--text-dim);
+  font-family: var(--mono);
+}

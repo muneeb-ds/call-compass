@@ -181,7 +181,10 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
 - `default_frontend_dir()` resolves `frontend/` from the repo root, same pattern as
   `default_config_path()`. `create_app(frontend_dir=...)` overrides it.
 - The frontend is **vanilla ES modules** — no bundler, no transpile, no node_modules. There is
-  no JS typecheck or lint step; `frontend/` is covered only by the backend's serving tests.
+  no JS typecheck or lint step. See `frontend/CLAUDE.md`; its audio pipeline is covered from
+  here by `tests/test_frontend_audio.py`, which runs the shipped JS encoder under node
+  (`tests/encode_fixture.mjs`) and feeds the bytes to `decode_wav` and `/api/analyze`. That
+  test skips if `node` is missing, so a green suite does not imply it ran.
 
 ## Tests
 
