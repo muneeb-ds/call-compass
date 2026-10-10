@@ -5,7 +5,7 @@
 // (US-011) — playing back a separate MediaRecorder blob would show the operator
 // audio the model never heard, which is the opposite of useful when a run misfires.
 
-import { SAMPLE_RATE, concatChunks, encodeWav } from "./wav.js";
+import { SAMPLE_RATE, clampSamples, concatChunks, encodeWav } from "./wav.js";
 
 /** Name registered by recorder-worklet.js. */
 const PROCESSOR = "recorder";
@@ -128,7 +128,7 @@ export class Recorder {
     this.recording = false;
     await this.release();
 
-    const samples = concatChunks(this.chunks);
+    const samples = clampSamples(concatChunks(this.chunks));
     const bytes = encodeWav(samples, SAMPLE_RATE);
     return {
       bytes,

@@ -185,7 +185,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Builds the UI on top of US-009's capture pipeline. Split from capture deliberately so the audio-format work and the visual work can each be verified on their own."
     },
     {

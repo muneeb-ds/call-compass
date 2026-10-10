@@ -70,6 +70,13 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   never `alert()` and never a silent catch.
 - `frontend/app.js` **exports** its entry points (`checkHealth`, `wireCapture`) and calls them
   at the bottom, so a later story can reuse them rather than re-deriving the wiring.
+  `wireCapture()` returns `{ recorder, waveform, timer, toggle, latest }` — drive those from a
+  later story instead of re-querying the DOM.
+- A frontend constant that mirrors a backend constant is **derived, never retyped**
+  (`timer.js`'s `MAX_RECORDING_MS` comes from `wav.js`'s `MAX_SECONDS`), and pinned by a
+  node-run pytest. Hand-writing the same limit twice is how a valid recording becomes a 400.
+- All browser audio limits live in `wav.js` (`SAMPLE_RATE`, `MAX_SECONDS`, `clampSamples`);
+  it is the only frontend module allowed to know the wire format or trim audio.
 
 ---
 
@@ -400,4 +407,56 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
   - A stale uvicorn from an earlier iteration was still holding port 8077. Check
     `lsof -ti:<port>` before concluding a manual server check succeeded — the 200s were
     coming from the old process.
+---
+
+## 2026-10-10 - US-010
+- Implemented the record/stop button's recording state, the live Canvas waveform, and the
+  count-up timer with a hard 30-second auto-stop.
+- Files changed:
+  - `frontend/waveform.js` (new): `Waveform(canvas)` — rAF loop over
+    `analyser.getByteTimeDomainData`, red live trace, flat gray baseline when idle,
+    backing store re-matched to the CSS size each frame (`measure()`).
+  - `frontend/timer.js` (new): pure `formatClock` / `formatElapsed`, `MAX_RECORDING_MS`
+    derived from `wav.js`, and `RecordingTimer` (display tick + its own auto-stop timeout).
+  - `frontend/wav.js`: added `MAX_SECONDS = 30` and `clampSamples()`.
+  - `frontend/capture.js`: `stop()` now clamps the buffer before encoding.
+  - `frontend/app.js`: `wireCapture()` restructured around one guarded `toggle()` shared by
+    the click handler and the auto-stop; starts/stops the waveform and timer; returns
+    `{ recorder, waveform, timer, toggle, latest }`.
+  - `frontend/index.html`: `#waveform-slot` now holds `<canvas id="waveform-canvas">`;
+    the timer placeholder is a real `<p id="timer" role="timer">`.
+  - `frontend/styles.css`: red `pulse` keyframe halo on `[data-recording="true"]` (with a
+    `prefers-reduced-motion` static fallback), `.waveform`, `.timer`.
+  - `backend/tests/timing_fixture.mjs` + `backend/tests/test_frontend_timing.py` (new,
+    9 tests): node runs the shipped `timer.js`/`wav.js`; asserts the UI ceiling equals
+    `audio.MAX_SECONDS`, the `m:ss` and `"0:12 / 0:30"` formats, and that a 30.4 s / 35 s
+    overshoot still decodes at exactly 30 s and POSTs 200.
+  - `frontend/CLAUDE.md`, `backend/CLAUDE.md`.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean,
+  `pytest` 106 passed (was 97). `node --check` clean on all six JS files. Booted a live
+  uvicorn with the fake engine: `/`, `/styles.css`, `/app.js`, `/timer.js`, `/waveform.js`,
+  `/api/health` all 200 with the right content types.
+- **Browser verification: NOT done — no dev-browser/MCP browser tool in this environment.**
+  Manual check still needed over `http://localhost`: the button turns red and pulses, the
+  waveform moves with speech and sits flat gray before/after, the timer reads `0:0N / 0:30`,
+  and leaving it running stops itself at 0:30.
+- **Learnings for future iterations:**
+  - **Wall-clock auto-stop can overshoot the duration limit.** Stopping at exactly 30 000 ms
+    still leaves the worklet having posted a few extra ms, which `decode_wav` rejects as
+    `> 30 s`. Hence `clampSamples()` in `wav.js` — the one place the frontend is allowed to
+    trim audio, and only at the backend's own stated ceiling. The display is clamped too, so
+    a late stop can't render "0:30.4".
+  - A frontend constant that mirrors a backend constant must be **derived** (`MAX_RECORDING_MS
+    = MAX_SECONDS * 1000` out of `wav.js`) and pinned by a node-run pytest. Two hand-written
+    30s is exactly the drift that produces a 400 on a recording the operator watched succeed.
+  - The ceiling gets its own `setTimeout`, not a check inside the 100 ms display tick:
+    "auto-stops at exactly 30 seconds" is otherwise up to a tick late.
+  - `canvas.width/height` are the backing store, independent of the CSS box. Set them from
+    `clientWidth * devicePixelRatio` **per frame** (cheap, and it is also the resize handler)
+    rather than in HTML, or the trace is blurry and stretches on resize.
+  - `getByteTimeDomainData` centres silence on **128**, not 0 — map `(v - 128) / 128`.
+  - A click and the auto-stop can land together, so `toggle()` carries a `busy` flag;
+    `button.disabled` alone is not enough because the auto-stop is not a click.
+  - The `onLimit` callback can reference `toggle` before its declaration — function
+    declarations hoist within `wireCapture`, and the arrow only runs later.
 ---

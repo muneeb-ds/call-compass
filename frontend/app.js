@@ -5,6 +5,8 @@
 // step — this is loaded directly as an ES module.
 
 import { MicrophoneError, Recorder } from "./capture.js";
+import { RecordingTimer } from "./timer.js";
+import { Waveform } from "./waveform.js";
 
 /** @param {string} text @param {"loading"|"ready"|"error"} state */
 function setStatus(text, state) {
@@ -91,12 +93,24 @@ export async function verifyAccepted(bytes) {
   }
 }
 
-/** Wires the Capture column's record button to the recorder. */
+/**
+ * Wires the Capture column: record/stop button, live waveform, and the 30 s clock.
+ *
+ * One `toggle()` drives every transition, so the auto-stop at the ceiling takes
+ * exactly the same path as a click on Stop.
+ */
 export function wireCapture() {
   const button = document.getElementById("record-button");
   const recorder = new Recorder();
+  const waveform = new Waveform(
+    /** @type {HTMLCanvasElement} */ (document.getElementById("waveform-canvas")),
+  );
+  const timer = new RecordingTimer(document.getElementById("timer"), {
+    onLimit: () => void toggle(),
+  });
   /** @type {import("./capture.js").Recording|null} */
   let recording = null;
+  let busy = false;
 
   /** @param {boolean} isRecording */
   function render(isRecording) {
@@ -105,41 +119,64 @@ export function wireCapture() {
     button.setAttribute("aria-pressed", String(isRecording));
   }
 
-  button.addEventListener("click", async () => {
+  /** Settles the UI back to its not-recording look. */
+  function settle() {
+    waveform.stop();
+    timer.stop();
+    render(false);
+  }
+
+  async function start() {
+    setCaptureMessage("");
+    await recorder.start();
+    render(true);
+    waveform.start(recorder.analyser);
+    timer.start();
+  }
+
+  async function stop() {
+    recording = await recorder.stop();
+    settle();
+    const problem = recording ? await verifyAccepted(recording.bytes) : "";
+    if (problem) {
+      setCaptureMessage(problem, "error");
+    } else if (recording) {
+      setCaptureMessage(
+        `Captured ${(recording.durationMs / 1000).toFixed(1)}s · ` +
+          `${recording.bytes.length} bytes · ${recording.sampleRate} Hz mono`,
+        "info",
+      );
+    }
+  }
+
+  /** Record <-> Stop. Re-entrant calls are dropped, including a click racing the auto-stop. */
+  async function toggle() {
+    if (busy) return;
+    busy = true;
     button.disabled = true;
     try {
-      if (recorder.recording) {
-        recording = await recorder.stop();
-        render(false);
-        const problem = recording ? await verifyAccepted(recording.bytes) : "";
-        if (problem) {
-          setCaptureMessage(problem, "error");
-        } else if (recording) {
-          setCaptureMessage(
-            `Captured ${(recording.durationMs / 1000).toFixed(1)}s · ` +
-              `${recording.bytes.length} bytes · ${recording.sampleRate} Hz mono`,
-            "info",
-          );
-        }
-      } else {
-        setCaptureMessage("");
-        await recorder.start();
-        render(true);
-      }
+      await (recorder.recording ? stop() : start());
     } catch (err) {
-      render(false);
+      settle();
       setCaptureMessage(
         err instanceof MicrophoneError ? err.message : `Recording failed: ${err.message}`,
         "error",
       );
     } finally {
+      busy = false;
       button.disabled = false;
     }
-  });
+  }
+
+  button.addEventListener("click", () => void toggle());
+  // Keeps the trace spanning the column when the window changes size while idle.
+  window.addEventListener("resize", () => waveform.render());
 
   render(false);
-  /** Exposed for the later stories that need the captured bytes. */
-  return { recorder, latest: () => recording };
+  waveform.stop();
+  timer.reset();
+  /** Exposed for the later stories that need the captured bytes or the controls. */
+  return { recorder, waveform, timer, toggle, latest: () => recording };
 }
 
 checkHealth();

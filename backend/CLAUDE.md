@@ -183,8 +183,12 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
 - The frontend is **vanilla ES modules** — no bundler, no transpile, no node_modules. There is
   no JS typecheck or lint step. See `frontend/CLAUDE.md`; its audio pipeline is covered from
   here by `tests/test_frontend_audio.py`, which runs the shipped JS encoder under node
-  (`tests/encode_fixture.mjs`) and feeds the bytes to `decode_wav` and `/api/analyze`. That
-  test skips if `node` is missing, so a green suite does not imply it ran.
+  (`tests/encode_fixture.mjs`) and feeds the bytes to `decode_wav` and `/api/analyze`, and by
+  `tests/test_frontend_timing.py` (`tests/timing_fixture.mjs`), which pins the UI's recording
+  ceiling to `audio.MAX_SECONDS`. Both skip if `node` is missing, so a green suite does not
+  imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
+  one of those two tests** — that is the only place the two sides are checked against
+  each other.
 
 ## Tests
 

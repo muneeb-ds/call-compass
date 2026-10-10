@@ -22,8 +22,10 @@
           </button>
         </div>
         <p class="message" id="capture-message" data-state="error" role="status" hidden></p>
-        <div class="placeholder" id="waveform-slot">Waveform</div>
-        <div class="placeholder mono" id="timer-slot">0:00 / 0:30</div>
+        <div class="waveform" id="waveform-slot">
+          <canvas id="waveform-canvas" aria-hidden="true"></canvas>
+        </div>
+        <p class="timer mono" id="timer" role="timer">0:00 / 0:30</p>
         <div class="placeholder" id="playback-slot">Playback</div>
         <div class="placeholder bottom" id="reset-slot">Reset</div>
       </section>

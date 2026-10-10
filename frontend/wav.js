@@ -14,6 +14,9 @@ export const BYTES_PER_SAMPLE = 2;
 /** The only sample rate the backend accepts. */
 export const SAMPLE_RATE = 16000;
 
+/** Longest recording the backend accepts, matching audio.py's MAX_SECONDS. */
+export const MAX_SECONDS = 30;
+
 const HEADER_BYTES = 44;
 const FORMAT_PCM = 1;
 const CHANNELS = 1;
@@ -73,6 +76,24 @@ export function encodeWav(samples, sampleRate = SAMPLE_RATE) {
   writePcm16(view, HEADER_BYTES, samples);
 
   return new Uint8Array(buffer);
+}
+
+/**
+ * Trims a buffer to the longest duration the backend accepts.
+ *
+ * The 30-second auto-stop fires on wall-clock time, so the worklet can have posted a
+ * few milliseconds more audio than that by the time the context closes. Those few
+ * milliseconds would be a 400 on a recording the operator watched succeed, so the
+ * tail is dropped here rather than argued about.
+ *
+ * @param {Float32Array} samples
+ * @param {number} [sampleRate]
+ * @param {number} [maxSeconds]
+ * @returns {Float32Array}
+ */
+export function clampSamples(samples, sampleRate = SAMPLE_RATE, maxSeconds = MAX_SECONDS) {
+  const limit = Math.floor(sampleRate * maxSeconds);
+  return samples.length > limit ? samples.subarray(0, limit) : samples;
 }
 
 /**
