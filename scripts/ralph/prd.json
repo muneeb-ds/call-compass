@@ -74,7 +74,7 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Keep this isolated in ONE file. The PRD flags (R-6) that the assumed neudecide tool-schema shape may not match the shipped package; isolating conversion here makes an API mismatch a single-file change."
     },
     {

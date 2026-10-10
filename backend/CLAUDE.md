@@ -75,6 +75,23 @@ Read from `.venv/lib/python3.11/site-packages/neudecide/`. These are facts, not 
 directory holding `config.json`, `tokenizer.model`/`tokenizer.json`, and the ONNX graphs.
 All backend tests use `tests/fakes.py` instead, so the suite needs no model and no network.
 
+## Node-to-tools conversion (`callcompass/tools.py`)
+
+- The **only** place that knows the `neudecide` tool-schema shape. It is pure (no model,
+  network, or filesystem), so an upstream API change is a one-file edit. Keep it that way.
+- `node_to_tools(branch)` → that node's options as tools, with `none_of_these` appended
+  **last**. Never build a tool list by hand elsewhere, and never pass options from more
+  than one node into a single `generate()` call.
+- One option → one tool with exactly one required, enum-constrained string argument.
+  `enum` is copied, not aliased, so a caller mutating the returned dict can't corrupt the
+  loaded `Tree`.
+- The `enum` is **advisory only** — `neudecide` grammar-constrains parameter *names*, not
+  values — so every caller must re-check membership in `option.argument.enum` after
+  `generate()` returns.
+- `tests/test_tools.py` pins the exact dict shape for `intent` and `signal_check`, and
+  round-trips a tool list through the real `neudecide.grammar.tool_parameters` to catch an
+  upstream schema change. Update those assertions deliberately, not reflexively.
+
 ## Model loading (`callcompass/model.py`)
 
 - `load_engine()` constructs the model **once**, times it, logs the duration and execution

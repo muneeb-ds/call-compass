@@ -28,6 +28,14 @@ Started: Sat Oct 10 19:46:45 PKT 2026
 - Before coding against a third-party package, **read its installed source** in
   `.venv/lib/python3.11/site-packages/<pkg>/` and record the confirmed signatures in
   `backend/CLAUDE.md`. Don't infer an API from the PRD's assumptions.
+- One external-API assumption per module, isolated: `tree.py` owns the config shape,
+  `tools.py` owns the `neudecide` tool schema, `model.py` owns construction/inference.
+  Downstream code consumes those, never the raw shapes.
+- When a third-party package exposes a helper that *reads* the shape you emit (e.g.
+  `neudecide.grammar.tool_parameters`), round-trip through it in a test — it's a real
+  guard against an upstream schema change, and needs no model or network.
+- Return **copies** of values read off loaded Pydantic models (`list(x.enum)`), so a
+  caller mutating a returned dict can't corrupt the process-wide loaded config.
 - Messages that embed a third-party exception must collapse it with `" ".join(str(exc).split())`
   — upstream errors (e.g. HF's `GatedRepoError`) are multi-line and bury the actionable hint.
 
@@ -128,4 +136,32 @@ Started: Sat Oct 10 19:46:45 PKT 2026
     `TestClient(app).get(...)` silently skips startup and `app.state` is never populated.
   - A `pydantic.BaseModel` return annotation on a route is how field names/types get pinned
     for the PRD's exact payload shapes — useful for US-007's event schemas too.
+---
+
+## 2026-10-10 - US-004
+- Implemented the pure node-to-tools conversion function.
+- Files changed:
+  - `backend/callcompass/tools.py` (new: `node_to_tools`, `option_to_tool`,
+    `none_of_these_tool`, `NONE_OF_THESE_DESCRIPTION`)
+  - `backend/tests/test_tools.py` (new: 9 tests)
+  - `backend/CLAUDE.md` (new "Node-to-tools conversion" section)
+- Verified: `ruff check .` clean, `mypy callcompass` clean (5 files), `pytest` 36 passed.
+  Also confirmed by hand that `neudecide.grammar.tool_parameters(node_to_tools(intent))`
+  returns `{'pricing_question': ['pricing_focus'], ..., 'none_of_these': []}` — the
+  emitted schema really is the shape the shipped package reads (closes PRD R-6 / Open
+  Question 1 for the tool-list side).
+- **Learnings for future iterations:**
+  - `none_of_these` is appended **last** in the tool list, and `node_to_tools` is the
+    single entry point. US-005 should call it per node rather than assembling tools itself.
+  - The emitted tool is
+    `{"name", "description", "parameters": {"type": "object", "properties": {<arg>: {"type": "string", "enum": [...], "description": ...}}, "required": [<arg>]}}`.
+    `tool_parameters` accepts this because `parameters` has `type == "object"` **and** a
+    dict `properties` — drop either and it silently falls back to treating `parameters`
+    itself as a flat key mapping, which would send garbage parameter names to the grammar.
+  - `enum` is copied with `list(...)` into the tool dict. Without that, a caller mutating
+    the returned tool would mutate the loaded `Tree` for the whole process.
+  - Reminder (from US-003, still unaddressed): the enum does not constrain decoding.
+    US-005 must verify the returned argument value is in the option's `enum` itself.
+  - `Tree.branch(node_id)` + `isinstance(node, BranchNode)` for whole-tree sweeps is the
+    established way to walk branch nodes; no new traversal helper was needed here.
 ---
