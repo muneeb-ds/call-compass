@@ -23,6 +23,7 @@ const load = (name) => import(pathToFileURL(join(frontend, name)).href);
 const { TreeView } = await load("tree.js");
 const { Trace } = await load("trace.js");
 const { Analysis, stepDetail } = await load("analysis.js");
+const { ResultCard, breadcrumb, formatEndToEnd } = await load("result.js");
 const { AnalyzeError, SseDecoder, parseFrame } = await load("sse.js");
 
 const arg = (name, fallback) => {
@@ -109,18 +110,31 @@ const listEl = element("div");
 const trace = new Trace(totalEl, listEl);
 const analysis = new Analysis(trace, view);
 
+// The result area, wired exactly as app.js wires it: drawn from the terminal event
+// only, cleared by reset().
+const resultEl = element("div");
+const result = new ResultCard(resultEl);
+result.clear();
+const resultEmpty = { state: resultEl.dataset.state, text: resultEl.children[0].textContent };
+analysis.onReset = () => result.clear();
+
 const frames = [];
+// The result area's state after each frame: it must stay empty until the terminal one.
+const resultStates = [];
 const handled = analysis.handle.bind(analysis);
 analysis.handle = (frame) => {
   frames.push([frame.event, frame.data]);
   if (frames.length === abortAfter) analysis.cancel();
-  return handled(frame);
+  const out = handled(frame);
+  resultStates.push([frame.event, resultEl.dataset.state]);
+  return out;
 };
 
 let terminal = null;
 let failure = null;
 analysis.onTerminal = (frame) => {
   terminal = frame.event;
+  if (frame.event === "completed") result.completed(frame.data, analysis.picks);
 };
 try {
   await analysis.run(new Uint8Array([1, 2, 3]), { fetchImpl: fakeFetch });
@@ -166,6 +180,29 @@ process.stdout.write(
     ),
     total: totalEl.textContent,
     cards: listEl.children.map(card),
+    picks: analysis.picks,
+    resultEmpty,
+    resultStates,
+    // What the recommendation card says, read back out of the stub elements.
+    result: (() => {
+      const state = resultEl.dataset.state;
+      const el = resultEl.children[0];
+      const text = (className) => {
+        const found = el.children && el.children.find((c) => c.className === className);
+        return found ? found.textContent : null;
+      };
+      if (state !== "completed") return { state, empty: el.textContent };
+      const head = el.children.find((c) => c.className === "result-head");
+      return {
+        state,
+        label: head.textContent,
+        latency: head.children[0].textContent,
+        latencyClass: head.children[0].className,
+        recommendation: text("result-recommendation"),
+        path: text("result-path"),
+        rationale: text("result-rationale"),
+      };
+    })(),
     // Reset is US-016's button, but it has to undo everything above right now.
     afterReset: (() => {
       analysis.reset();
@@ -175,6 +212,8 @@ process.stdout.write(
         details: [...view.detailEls.values()].every((el) => el.children.length === 0),
         cards: listEl.children.length,
         total: totalEl.textContent,
+        picks: analysis.picks,
+        result: { state: resultEl.dataset.state, text: resultEl.children[0].textContent },
       };
     })(),
     // The decoder on its own: a frame split anywhere must still arrive exactly once.
@@ -192,6 +231,12 @@ process.stdout.write(
       return got.map((f) => f.event);
     })(),
     noData: parseFrame("event: step"),
+    breadcrumb: {
+      three: breadcrumb(["pricing_question", "pro_tier", "budget_objection"]),
+      one: breadcrumb(["not_interested"]),
+      none: breadcrumb([]),
+    },
+    endToEnd: formatEndToEnd(497.6),
     stepDetail: stepDetail({
       tool_called: "pricing_question",
       arguments: { pricing_focus: "plan_cost" },

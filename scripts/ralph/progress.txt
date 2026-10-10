@@ -91,6 +91,12 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   quietly stopped following `config/tree.json` must fail a test, not a demo.
 - No browser tool in this environment. For an SVG story, render the shipped layout to a
   standalone `.svg`, rasterize with `qlmanage -t -s 1200 -o /tmp x.svg`, and Read the PNG.
+  **The same works for HTML**: write a standalone `.html` with the real `styles.css`
+  inlined and markup serialized from the shipped module, then `qlmanage -t` it. That is
+  the closest thing to a visual check for a non-SVG UI story.
+- A UI module that renders a backend payload is wired through a **hook on `Analysis`**
+  (`onTerminal` / `onError` / `onReset`), never by re-reading the stream or by `Analysis`
+  touching the DOM itself.
 
 ---
 
@@ -621,4 +627,53 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
   - `run_harness(body, tmp_path, "--chunk=1")` is the cheap way to prove the decoder is
     genuinely incremental. The one-character-at-a-time replay is what catches a parser that
     only works because the test body happened to arrive in one piece.
+---
+
+## 2026-10-11 - US-014
+- Implemented the recommendation leaf card in the result area: on `completed` a
+  green-accented card renders the leaf label, the recommendation at 1.25rem, the
+  breadcrumb of chosen options, the end-to-end latency badge in monospace, and the
+  rationale in smaller text beneath. Nothing is drawn before the terminal event.
+- Files changed:
+  - `frontend/result.js` (new): pure `breadcrumb(picks)` / `formatEndToEnd(ms)` plus
+    `ResultCard(container)` with `clear()` (empty state) and `completed(data, picks)`.
+  - `frontend/analysis.js`: records each step's `tool_called` in `picks` and clears it on
+    `reset()`; new `onReset` hook so UI this class does not own can clear itself.
+  - `frontend/app.js`: `wireAnalysis` builds the `ResultCard`, wires `onTerminal`
+    (completed only) and `onReset`, and returns `result`; `main()` returns it too.
+  - `frontend/index.html` (`#result-slot` is a real `data-state` slot with an empty-state
+    paragraph instead of a placeholder), `frontend/styles.css` (`.result-slot`,
+    `.result-card`, `.result-head`, `.result-latency`, `.result-recommendation`,
+    `.result-path`, `.result-rationale`).
+  - `backend/tests/analysis_fixture.mjs` (drives `ResultCard` exactly as `app.js` does and
+    reports the card, the per-frame result state, and the pure formatters),
+    `backend/tests/test_frontend_analysis.py` (7 new tests),
+    `backend/tests/test_app.py` (`/result.js` is served).
+  - `frontend/CLAUDE.md`.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean
+  (13 files), `pytest` 163 passed (was 156). `node --check` clean on the changed JS.
+- **Browser verification: NOT done — still no dev-browser/MCP browser tool here.** Instead
+  the shipped `ResultCard` was driven over a serializing stub, written to a standalone HTML
+  file with the real `styles.css` inlined, rasterized with `qlmanage -t`, and the image
+  inspected: green left rule and border, label + "498 ms end to end" badge on one row, the
+  recommendation as the largest text, the blue breadcrumb under it, the rationale dim and
+  small, and the pre-run empty state still a dashed slot of the same height.
+- **Learnings for future iterations:**
+  - **`qlmanage -t` rasterizes HTML, not just SVG** (it is WebKit underneath). That makes a
+    real visual check possible for any DOM story here, not only the SVG ones — build the page
+    from the shipped module over a stub element that serializes itself.
+  - That stub's `html()` must emit `textContent` **and** children. A first version emitted
+    children only, and the card's label silently vanished from the picture — a serializer bug
+    that reads exactly like a missing-element app bug.
+  - The card's number is `total_latency_ms` (end to end) while the Trace column's is
+    `total_inference_ms`. They differ by the request overhead, so the card's badge says
+    "end to end" explicitly — two bare "Total: N ms" figures on one screen invite the
+    audience to read the gap as a bug.
+  - The breadcrumb comes from `analysis.picks` (each step's `tool_called`), **not** from the
+    `completed` event's `path`, which is node ids. PRD Open Question 5: option labels.
+  - `Analysis.onReset` is the general shape for this: a module that owns DOM `Analysis`
+    does not touch subscribes to a hook. US-015's card and US-016's button should use the
+    same three hooks rather than adding a second teardown path.
+  - US-015 draws into the same `#result-slot` — add an `unplaced(data)` method and a
+    `data-state="unplaced"` CSS block to `result.js`, not a second container.
 ---

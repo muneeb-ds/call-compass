@@ -455,6 +455,84 @@ body {
   word-break: break-word;
 }
 
+/* Result area: empty until a terminal event, then one card. The slot keeps the same
+ * dashed outline as the other empty states so the area does not change shape. */
+.result-slot {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-slot[data-state="empty"] {
+  display: grid;
+  place-items: center;
+  min-height: 3rem;
+  padding: var(--gap);
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.result-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* The recommendation itself: green-accented, and the recommendation text is the
+ * largest thing on the page after the running total. */
+.result-card {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #2b6b3c;
+  border-left: 4px solid var(--ok);
+  border-radius: var(--radius);
+  background: #121c16;
+}
+
+.result-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ok);
+}
+
+.result-latency {
+  margin-left: auto;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #16281c;
+  color: var(--ok);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.result-recommendation {
+  margin: 0.35rem 0 0;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+/* The chosen options, in order — the conversation the model heard. */
+.result-path {
+  margin: 0.4rem 0 0;
+  color: var(--accent);
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.result-rationale {
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 /* Inline capture feedback: a denied mic or a rejected upload is reported here, in
  * the column it belongs to. Never an alert(). */
 .message {

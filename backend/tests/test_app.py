@@ -139,6 +139,7 @@ def test_frontend_assets_are_served() -> None:
             ("/sse.js", "javascript"),
             ("/trace.js", "javascript"),
             ("/analysis.js", "javascript"),
+            ("/result.js", "javascript"),
         ):
             response = client.get(path)
             assert response.status_code == 200, path

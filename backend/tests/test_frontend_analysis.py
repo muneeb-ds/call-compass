@@ -283,3 +283,73 @@ def test_reset_returns_the_whole_ui_to_its_initial_state(happy: dict[str, Any]) 
 @requires_node
 def test_step_detail_formats_the_latency_as_an_integer(happy: dict[str, Any]) -> None:
     assert happy["stepDetail"] == ["Pricing question", "pricing_focus: plan_cost", "143 ms"]
+
+
+@requires_node
+def test_result_card_shows_the_leaf_recommendation_and_rationale(
+    happy: dict[str, Any], happy_body: str
+) -> None:
+    (completed,) = [data for name, data in happy["frames"] if name == "completed"]
+    card = happy["result"]
+    assert card["state"] == "completed"
+    assert card["label"] == completed["label"]
+    assert card["recommendation"] == completed["recommendation"]
+    # The rationale is the smaller "why" line beneath the recommendation.
+    assert card["rationale"] == completed["rationale"]
+    assert card["rationale"] and card["rationale"] != card["recommendation"]
+
+
+@requires_node
+def test_result_card_breadcrumb_names_the_chosen_options(happy: dict[str, Any]) -> None:
+    # Option labels, not node labels: the breadcrumb reads as the conversation.
+    assert happy["picks"] == ["pricing_question", "pro_tier", "budget_objection"]
+    assert happy["result"]["path"] == "Pricing question → Pro tier → Budget objection"
+
+
+@requires_node
+def test_result_card_shows_end_to_end_latency_in_monospace(happy: dict[str, Any]) -> None:
+    (completed,) = [data for name, data in happy["frames"] if name == "completed"]
+    # End-to-end, i.e. the request clock — not the trace column's inference-only total.
+    assert happy["result"]["latency"] == f"{completed['total_latency_ms']} ms end to end"
+    assert happy["result"]["latencyClass"] == "result-latency mono"
+    assert completed["total_latency_ms"] >= completed["total_inference_ms"]
+
+
+@requires_node
+def test_result_card_renders_only_after_the_terminal_event(happy: dict[str, Any]) -> None:
+    assert happy["resultEmpty"]["state"] == "empty"
+    assert happy["resultEmpty"]["text"].startswith("The recommendation appears here")
+    # Empty through `started` and every `step`; a card only once `completed` arrives.
+    assert happy["resultStates"] == [
+        ["started", "empty"],
+        ["step", "empty"],
+        ["step", "empty"],
+        ["step", "empty"],
+        ["completed", "completed"],
+        ["done", "completed"],
+    ]
+
+
+@requires_node
+def test_unplaced_run_shows_no_recommendation(unplaced_body: str, tmp_path: Path) -> None:
+    result = run_harness(unplaced_body, tmp_path)
+    assert result["result"]["state"] == "empty"
+    assert result["result"]["empty"].startswith("The recommendation appears here")
+
+
+@requires_node
+def test_reset_clears_the_result_card_and_the_breadcrumb(happy: dict[str, Any]) -> None:
+    after = happy["afterReset"]
+    assert after["picks"] == []
+    assert after["result"]["state"] == "empty"
+    assert after["result"]["text"].startswith("The recommendation appears here")
+
+
+@requires_node
+def test_breadcrumb_and_latency_formatting(happy: dict[str, Any]) -> None:
+    assert happy["breadcrumb"] == {
+        "three": "Pricing question → Pro tier → Budget objection",
+        "one": "Not interested",
+        "none": "",
+    }
+    assert happy["endToEnd"] == "498 ms end to end"

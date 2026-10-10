@@ -7,6 +7,7 @@
 import { Analysis } from "./analysis.js";
 import { MicrophoneError, Recorder } from "./capture.js";
 import { Playback } from "./playback.js";
+import { ResultCard } from "./result.js";
 import { AnalyzeError } from "./sse.js";
 import { RecordingTimer } from "./timer.js";
 import { Trace } from "./trace.js";
@@ -204,15 +205,24 @@ export function wireCapture(hooks = {}) {
  * no tree drawn still produces trace cards and a total.
  *
  * @param {Promise<{view: TreeView, tree: object}|null>} loading the `loadTree()` promise
- * @returns {{analysis: Analysis, onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
+ * @returns {{analysis: Analysis, result: ResultCard,
+ *            onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
  */
 export function wireAnalysis(loading) {
   const trace = new Trace(
     document.getElementById("trace-total"),
     document.getElementById("trace-list"),
   );
+  const result = new ResultCard(document.getElementById("result-slot"));
   const analysis = new Analysis(trace);
   trace.reset();
+  result.clear();
+  // The card is drawn from the terminal event only, so an in-flight run never shows a
+  // recommendation; `reset()` (a new run, or US-016's button) takes it away again.
+  analysis.onReset = () => result.clear();
+  analysis.onTerminal = (frame) => {
+    if (frame.event === "completed") result.completed(frame.data, analysis.picks);
+  };
   void loading.then((loaded) => {
     if (loaded) analysis.view = loaded.view;
   });
@@ -237,16 +247,16 @@ export function wireAnalysis(loading) {
     }
   }
 
-  return { analysis, onRecording };
+  return { analysis, result, onRecording };
 }
 
 /** Page entry point. Exported so a later story can wire the same parts differently. */
 export function main() {
   checkHealth();
   const loading = loadTree();
-  const { analysis, onRecording } = wireAnalysis(loading);
+  const { analysis, result, onRecording } = wireAnalysis(loading);
   const capture = wireCapture({ onRecording });
-  return { analysis, capture, loading };
+  return { analysis, result, capture, loading };
 }
 
 main();

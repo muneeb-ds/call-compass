@@ -254,7 +254,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Breadcrumb shows chosen OPTION labels, not node labels (PRD Open Question 5 - option labels read better and were the assumption)."
     },
     {

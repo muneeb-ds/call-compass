@@ -45,12 +45,16 @@ export class Analysis {
     this.error = null;
     /** The last node that was lit, so a step can draw the edge from its parent. */
     this.lit = null;
+    /** @type {string[]} each step's `tool_called`, in arrival order — the result breadcrumb. */
+    this.picks = [];
     /** @type {AbortController|null} */
     this.controller = null;
     /** @type {((frame: {event: string, data: object}) => void)|null} */
     this.onTerminal = null;
     /** @type {((payload: object) => void)|null} */
     this.onError = null;
+    /** @type {(() => void)|null} called by `reset()`, for UI this class does not own. */
+    this.onReset = null;
   }
 
   /** True while a traversal is in flight. */
@@ -63,8 +67,10 @@ export class Analysis {
     this.terminal = null;
     this.error = null;
     this.lit = null;
+    this.picks = [];
     this.trace.reset();
     if (this.view) this.view.reset();
+    if (this.onReset) this.onReset();
   }
 
   /** Aborts an in-flight stream. Safe to call when nothing is running. */
@@ -98,6 +104,7 @@ export class Analysis {
       this.lightEdge(this.lit, data.node_id);
       if (this.view) this.view.annotate(data.node_id, stepDetail(data));
       this.trace.addStep(data);
+      this.picks.push(data.tool_called);
       this.lit = data.node_id;
       return;
     }

@@ -78,7 +78,16 @@ it can be pinned from pytest this way** — that is the only test runner this di
   artificial delays, ever; the real per-call timing is what the demo exists to show. The leaf
   gets no `step` of its own, so it lights on the terminal event. `onTerminal` / `onError` are
   the hooks US-014/US-015 should subscribe to rather than re-reading the stream, and
-  `reset()` / `cancel()` are what US-016's button calls.
+  `reset()` / `cancel()` are what US-016's button calls. It also records every step's
+  `tool_called` in `picks`, which is the result card's breadcrumb — the card must not
+  re-derive the path from the terminal event's `path` (those are node ids).
+- `result.js` — the result area. `breadcrumb(picks)` / `formatEndToEnd(ms)` are pure;
+  `ResultCard(container)` draws **only** from a terminal event, so an in-flight run can
+  never be read as a recommendation. The breadcrumb names the **chosen options**
+  (`humanize`d from `trace.js`), not the node labels, and the card's latency is
+  `total_latency_ms` (end to end) — deliberately a different number from the Trace
+  column's inference-only total, which is why it is labelled "end to end".
+  `clear()` is the empty state and is wired to `Analysis.onReset`.
 - `app.js` — page wiring only. Exports its entry points (`checkHealth`, `loadTree`,
   `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
   re-deriving. `wireCapture({onRecording})` returns
@@ -86,6 +95,14 @@ it can be pinned from pytest this way** — that is the only test runner this di
   the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
   traversal without inventing a second flag. `main()` returns `{ analysis, capture, loading }`
   — US-016 should drive those rather than re-querying the DOM.
+
+## Looking at the UI without a browser
+
+There is no browser tool here. `qlmanage -t -s 1400 -o /tmp page.html` rasterizes a
+**standalone HTML** file through WebKit (and the same works for `.svg`), and the Read
+tool can view the PNG. Build that file by driving the *shipped* module over a stub
+element that can serialize itself, with the real `styles.css` inlined — re-implementing
+the markup by hand produces a picture that is wrong in ways that read as app bugs.
 
 ## Conventions
 
