@@ -150,7 +150,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Pure layout and plumbing story - no recording, no tree rendering, no SSE. Existing only so later UI stories have a page to attach to. Confirm with dev-browser that all three columns and the result area are visible at laptop width."
     },
     {

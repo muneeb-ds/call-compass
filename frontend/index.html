@@ -4,9 +4,42 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CallCompass</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <h1>CallCompass</h1>
-    <p>Frontend shell lands in US-008.</p>
+    <header class="topbar">
+      <h1>CallCompass</h1>
+      <p class="tagline">On-device speech &rarr; tool call &rarr; next best thing to say.</p>
+      <p class="status" id="health-status" data-state="loading">Checking backend&hellip;</p>
+    </header>
+
+    <main class="layout">
+      <section class="column capture" aria-labelledby="capture-heading">
+        <h2 id="capture-heading">Capture</h2>
+        <div class="placeholder" id="record-slot">Record button</div>
+        <div class="placeholder" id="waveform-slot">Waveform</div>
+        <div class="placeholder mono" id="timer-slot">0:00 / 0:30</div>
+        <div class="placeholder" id="playback-slot">Playback</div>
+        <div class="placeholder bottom" id="reset-slot">Reset</div>
+      </section>
+
+      <section class="column tree" aria-labelledby="tree-heading">
+        <h2 id="tree-heading">Tree</h2>
+        <div class="placeholder grow" id="tree-slot">Decision tree</div>
+      </section>
+
+      <section class="column trace" aria-labelledby="trace-heading">
+        <h2 id="trace-heading">Trace</h2>
+        <div class="placeholder mono" id="total-slot">Total: &mdash;</div>
+        <div class="placeholder grow" id="trace-slot">Step cards</div>
+      </section>
+
+      <section class="result" aria-labelledby="result-heading">
+        <h2 id="result-heading">Result</h2>
+        <div class="placeholder" id="result-slot">Recommendation</div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
   </body>
 </html>

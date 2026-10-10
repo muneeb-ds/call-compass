@@ -18,6 +18,7 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .audio import AudioError, decode_wav
@@ -29,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 #: Builds the loaded model. Swapped for a fake in tests.
 ModelLoader = Callable[[], InferenceEngine]
+
+
+def default_frontend_dir() -> Path:
+    """`frontend/` at the repo root, resolved relative to this file."""
+    return Path(__file__).resolve().parents[2] / "frontend"
 
 
 class HealthResponse(BaseModel):
@@ -45,11 +51,13 @@ def create_app(
     *,
     model_loader: ModelLoader | None = None,
     tree_path: str | Path | None = None,
+    frontend_dir: str | Path | None = None,
 ) -> FastAPI:
     """Builds the app. Startup order is tree-then-model: config errors are cheap and
     should surface before the expensive model load."""
     loader = model_loader if model_loader is not None else load_engine
     config_path = tree_path if tree_path is not None else default_config_path()
+    static_dir = Path(frontend_dir if frontend_dir is not None else default_frontend_dir())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -121,6 +129,11 @@ def create_app(
             media_type=SSE_MEDIA_TYPE,
             headers=SSE_HEADERS,
         )
+
+    # Mounted last and at the root so the demo runs on one port with no build step.
+    # Starlette matches routes in registration order, so every `/api/*` route above
+    # still wins; `html=True` makes `GET /` serve `index.html`.
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
 
     return app
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from callcompass.main import app, create_app
+from callcompass.main import app, create_app, default_frontend_dir
 from callcompass.model import InferenceEngine, ModelLoadError, load_engine
 from callcompass.tree import TreeConfigError, default_config_path
 
@@ -115,3 +115,38 @@ def test_engine_exposes_sample_rate_and_providers() -> None:
     engine = fake_engine()
     assert engine.sample_rate == 16000
     assert engine.providers == ["CPUExecutionProvider"]
+
+
+def test_root_serves_the_frontend_shell() -> None:
+    with TestClient(create_app(model_loader=fake_engine)) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    body = response.text
+    # The three columns plus the result area, and the no-build-step ES module entry.
+    for marker in ("capture-heading", "tree-heading", "trace-heading", "result-heading"):
+        assert marker in body
+    assert 'type="module"' in body
+
+
+def test_frontend_assets_are_served() -> None:
+    with TestClient(create_app(model_loader=fake_engine)) as client:
+        for path, content_type in (("/styles.css", "text/css"), ("/app.js", "javascript")):
+            response = client.get(path)
+            assert response.status_code == 200, path
+            assert content_type in response.headers["content-type"], path
+
+
+def test_static_mount_does_not_shadow_the_api() -> None:
+    """The mount sits at `/`, so guard the ordering that keeps `/api/*` reachable."""
+    with TestClient(create_app(model_loader=fake_engine)) as client:
+        assert client.get("/api/health").json()["status"] == "ok"
+        assert client.get("/api/tree").json()["tree_id"] == "northbeam-saas-v1"
+
+
+def test_frontend_dir_contains_the_shell() -> None:
+    frontend = default_frontend_dir()
+    assert (frontend / "index.html").is_file()
+    assert (frontend / "styles.css").is_file()
+    assert (frontend / "app.js").is_file()

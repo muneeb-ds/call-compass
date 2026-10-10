@@ -132,6 +132,13 @@ def _app_with_decode_route() -> FastAPI:
         decoded = decode_wav(await request.body())
         return {"duration_ms": decoded.duration_ms}
 
+    # `create_app` mounts the frontend at `/`, which matches every path. Starlette
+    # resolves routes in order, so a route appended afterwards is shadowed (GET-only
+    # mount -> 405). Push the mount back to last.
+    mount = next(route for route in app.router.routes if getattr(route, "name", "") == "frontend")
+    app.router.routes.remove(mount)
+    app.router.routes.append(mount)
+
     return app
 
 

@@ -57,6 +57,11 @@ Started: Sat Oct 10 19:46:45 PKT 2026
   assert the loop's `threading.get_ident()` isn't among the idents the fake recorded.
 - The model warmup lives in `load_engine()`, not the lifespan handler, so tests injecting a
   `model_loader` see **zero** warmup calls in `FakeModel.calls`.
+- A `StaticFiles` mount at `/` (in `create_app`) matches every path and is GET-only: routes
+  registered **after** `create_app()` returns are shadowed and answer 405. Re-append the mount
+  (`app.router.routes`) if you add one.
+- `frontend/` is vanilla ES modules with no bundler, no node_modules, and **no JS typecheck or
+  lint**. Its only automated coverage is the backend's static-serving tests.
 
 ---
 
@@ -285,3 +290,44 @@ Started: Sat Oct 10 19:46:45 PKT 2026
     assert the loop's own ident isn't among them.
   - US-008 adds the static mount for `/`. Mount it **after** the `/api/*` routes so a catch-all
     static route can't shadow them.
+
+HF_TOKEN is added now in environment## 2026-10-10 - US-008
+- Frontend shell now served by FastAPI from the same process/port, no build step.
+- Files changed:
+  - `frontend/index.html`, `frontend/styles.css` (three-column 25/50/25 grid + result area
+    spanning center+right, dark projection styling, monospace latency slots, labelled
+    placeholders for every later story's mount point) — both were already staged uncommitted
+    from a prior partial iteration; committed here as part of the story.
+  - `frontend/app.js` (new, ES module): the shell's only behaviour — `GET /api/health` on load,
+    inline `#health-status` readout, error text in-page on a non-200/`model_loaded: false`/
+    network failure. No alert(), no silent failure.
+  - `backend/callcompass/main.py`: `default_frontend_dir()`, `create_app(frontend_dir=...)`,
+    and `StaticFiles(..., html=True)` mounted at `/` as the last route.
+  - `backend/tests/test_app.py`: 4 new tests (root serves the shell, assets served with right
+    content types, `/api/*` not shadowed by the mount, frontend dir contents).
+  - `backend/tests/test_audio.py`: `_app_with_decode_route` now re-appends the frontend mount.
+  - `backend/CLAUDE.md`: new "Static frontend serving" section.
+- Verified: ruff clean, mypy clean (8 files), pytest 84 passed. Also booted a live
+  uvicorn with the fake engine: `GET /` 200 text/html, `/styles.css` 200 text/css,
+  `/app.js` 200 text/javascript, `/api/health` 200 ok.
+- **Browser verification: NOT done — no dev-browser/MCP browser tool is available in this
+  environment.** Manual check still needed at laptop width that all three columns and the
+  result area are visible. The serving + health plumbing is covered by tests and curl.
+- **Learnings for future iterations:**
+  - **A `StaticFiles` mount at `/` matches every path.** Starlette resolves routes in
+    registration order, so the `/api/*` routes registered before it are fine, but any route
+    added to the app *after* `create_app()` returns is shadowed and answers **405** (the mount
+    is GET-only). This broke two existing passing tests in `test_audio.py` the moment the mount
+    landed; the fix is to pull the mount out of `app.router.routes` and re-append it. If a
+    future story adds a route post-hoc, do the same.
+  - `html=True` on the mount is what makes `GET /` serve `index.html` — without it `/` is 404.
+  - The frontend has **no** typecheck or lint step (no node_modules, no bundler, by design).
+    "Typecheck passes" for a frontend story means the backend's mypy, nothing more; the only
+    automated coverage `frontend/` gets is the backend's serving tests. Keep JS simple and
+    export functions (`checkHealth`) so a later story can call them rather than re-deriving.
+  - A prior iteration left `frontend/index.html` and `frontend/styles.css` modified but
+    uncommitted. **Check `git status` for partial work before starting** — the layout half of
+    this story was already written.
+  - Running the real app needs the gated model; to exercise the server by hand, write a throwaway
+    module that does `create_app(model_loader=fake_engine)` and point uvicorn at it.
+---

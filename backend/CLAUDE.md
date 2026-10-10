@@ -170,6 +170,19 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   and should surface before the expensive load.
 - Downstream code depends on the `SpeechToolModel` Protocol, never on `NeuDecide` directly.
 
+## Static frontend serving (`create_app`)
+
+- `frontend/` is mounted with `StaticFiles(..., html=True)` at **`/`**, as the **last** route in
+  `create_app`, so the demo runs on one port with no build step and `GET /` serves `index.html`.
+- That mount matches **every** path. Starlette resolves routes in registration order, so the
+  `/api/*` routes above it still win — but **any route added to the app after `create_app`
+  returns is shadowed** (a GET-only mount answers 405). If a test needs an extra route, move
+  the mount back to last (see `tests/test_audio.py::_app_with_decode_route`).
+- `default_frontend_dir()` resolves `frontend/` from the repo root, same pattern as
+  `default_config_path()`. `create_app(frontend_dir=...)` overrides it.
+- The frontend is **vanilla ES modules** — no bundler, no transpile, no node_modules. There is
+  no JS typecheck or lint step; `frontend/` is covered only by the backend's serving tests.
+
 ## Tests
 
 - `tests/` is a package (`tests/__init__.py`), so share fixtures via `from .fakes import ...`.
