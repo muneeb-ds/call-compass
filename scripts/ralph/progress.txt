@@ -564,3 +564,61 @@ HF_TOKEN is added now in environment## 2026-10-10 - US-008
     warning outline and US-016's clear are `data-state="warning"` and `reset()`. Add the CSS,
     not another render path. `loadTree()` returns `{ view, tree }` for exactly that.
 ---
+
+## 2026-10-11 - US-013
+- Implemented live path highlighting and the Trace panel from the SSE stream. On stop the
+  encoded WAV is POSTed to `/api/analyze` and the stream is read with `fetch` +
+  `ReadableStream` (not `EventSource`, which cannot POST a file body); each `step` lights
+  its node, draws the edge from the node lit before it, writes the option/argument/latency
+  under the node, and appends a trace card, with a running total pinned above the list.
+- Files changed:
+  - `frontend/sse.js` (new): `parseFrame`, incremental `SseDecoder`, `streamAnalyze`,
+    `AnalyzeError`.
+  - `frontend/trace.js` (new): pure `humanize`/`formatArguments`/`formatLatency`/
+    `formatTotal` plus the `Trace` card list and running total.
+  - `frontend/analysis.js` (new): `Analysis` — frames in, lit tree + cards out, with
+    `onTerminal`/`onError`/`reset`/`cancel` for US-014/US-015/US-016.
+  - `frontend/tree.js`: `TreeView.annotate(id, lines)` + an empty `<text>` drawn per node.
+  - `frontend/app.js`: dropped US-009's throwaway `verifyAccepted`, added `wireAnalysis()`
+    and `main()`; `wireCapture({onRecording})` awaits the hook inside the guarded `toggle()`.
+  - `frontend/index.html` (`#trace-total` / `#trace-list` replace the placeholders),
+    `frontend/styles.css` (visited/warning node + edge states, `.tree-detail`, trace cards).
+  - `backend/tests/analysis_fixture.mjs` + `backend/tests/test_frontend_analysis.py` (new,
+    20 tests), `backend/tests/test_app.py` (the three new JS files are served),
+    `frontend/CLAUDE.md`, `backend/CLAUDE.md`.
+- Verified: `ruff check .` clean, `mypy callcompass` clean (8 files), `mypy tests` clean
+  (13 files), `pytest` 156 passed (was 136). `node --check` clean on all ten JS files.
+  Booted a live uvicorn with the fake engine: all seven static assets plus `/api/health`
+  and `/api/tree` 200 with the right content types, and a real `POST /api/analyze` streamed
+  `started` / 3x `step` / `completed` / `done` in order.
+- **Browser verification: NOT done — still no dev-browser/MCP browser tool here.** Instead
+  the shipped `TreeView` + `Analysis` were driven over a serializing stub DOM, the resulting
+  SVG rasterized with `qlmanage`, and the image inspected: the lit path reads blue end to
+  end, `rec_budget` lights green, unvisited nodes stay dim. A human should still confirm the
+  ~120 ms transitions and the trace-card scroll at laptop width.
+- **Learnings for future iterations:**
+  - **That raster check found a real defect.** The per-node detail text sits in `ROW_GAP`,
+    which is exactly where the node's outgoing edge runs — and that edge is the brightest
+    thing on screen right after it lights, so the latency figures were unreadable. Fixed in
+    CSS with `paint-order: stroke` + `stroke: var(--bg)` on `.tree-detail`. Drawing the node
+    layer after the edge layer is *not* enough; a halo is the fix for SVG text over a graph.
+  - When rendering a throwaway SVG for inspection, drive the **shipped `TreeView`** over a
+    stub element that can serialize itself (~20 lines on top of the existing
+    `analysis_fixture.mjs` stub). A first attempt that re-implemented the drawing by hand
+    silently produced no edges at all, because `edgePath()` is private to `tree.js` and
+    layout edges carry no `path` field — the picture was wrong in a way that would have
+    been read as an app bug.
+  - `qlmanage -t -s N` makes the output **square and crops** a wide SVG. Set the `<svg>`
+    `width`/`height` to the real aspect ratio or the right-hand nodes silently vanish.
+  - The leaf never gets a `step` event of its own — it is only named by `completed`. Any
+    later story that keys off steps alone will leave the recommendation node dark.
+  - An `error` event is a **finished** run, not a throw: the backend always sends `done`
+    after it, so `streamAnalyze` resolves normally and the UI reads `analysis.error`. Only a
+    rejected upload (`AnalyzeError`) or an abort reaches the `catch`.
+  - Awaiting the traversal inside `toggle()`'s existing `busy` guard is what disables the
+    Record button for the whole run — no second flag, and a throw lands in the same inline
+    error path as a denied mic.
+  - `run_harness(body, tmp_path, "--chunk=1")` is the cheap way to prove the decoder is
+    genuinely incremental. The one-character-at-a-time replay is what catches a parser that
+    only works because the test body happened to arrive in one piece.
+---

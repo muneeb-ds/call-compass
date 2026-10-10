@@ -21,6 +21,9 @@ const PADDING = 14;
 /** Roughly how many characters of the label fit on one line at NODE_WIDTH. */
 const LINE_CHARS = 20;
 const MAX_LINES = 3;
+/** Where the live detail lines sit below a node box, inside ROW_GAP. */
+const DETAIL_OFFSET = 13;
+const DETAIL_LEADING = 11;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -199,6 +202,10 @@ export class TreeView {
     this.nodeEls = new Map();
     /** @type {Map<string, SVGPathElement>} */
     this.edgeEls = new Map();
+    /** Per-node <text> for the live detail lines, drawn empty and filled by `annotate`. */
+    this.detailEls = new Map();
+    /** @type {Map<string, object>} the laid-out geometry, by node id */
+    this.laid = new Map();
   }
 
   /** @param {string} name @param {Record<string, string|number>} attrs */
@@ -218,6 +225,8 @@ export class TreeView {
     this.layout = layout;
     this.nodeEls.clear();
     this.edgeEls.clear();
+    this.detailEls.clear();
+    this.laid = new Map(layout.nodes.map((node) => [node.id, node]));
     this.svg.replaceChildren();
     this.svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
     this.svg.setAttribute("role", "img");
@@ -277,8 +286,43 @@ export class TreeView {
       text.append(span);
     });
     group.append(text);
+
+    // Drawn empty and filled in by `annotate()` when this node's step arrives. It is
+    // created up front so highlighting never has to re-render — it only ever sets
+    // `data-state` and text, which is what keeps the ~120 ms CSS transitions intact.
+    const detail = this.create("text", {
+      class: "tree-detail",
+      x: node.x + node.width / 2,
+      y: node.y + node.height + DETAIL_OFFSET,
+      "text-anchor": "middle",
+    });
+    group.append(detail);
+    this.detailEls.set(node.id, detail);
+
     this.nodeEls.set(node.id, group);
     return group;
+  }
+
+  /**
+   * Writes the live detail lines under a node (option picked, argument, latency).
+   *
+   * @param {string} id
+   * @param {string[]} lines
+   */
+  annotate(id, lines) {
+    const detail = this.detailEls.get(id);
+    const laid = this.laid.get(id);
+    if (!detail || !laid) return undefined;
+    detail.replaceChildren();
+    lines.forEach((line, i) => {
+      const span = this.create("tspan", {
+        x: laid.x + laid.width / 2,
+        y: laid.y + laid.height + DETAIL_OFFSET + i * DETAIL_LEADING,
+      });
+      span.textContent = line;
+      detail.append(span);
+    });
+    return detail;
   }
 
   /** @param {string} id @returns {SVGGElement|undefined} */
@@ -295,5 +339,6 @@ export class TreeView {
   reset() {
     for (const el of this.nodeEls.values()) el.dataset.state = "idle";
     for (const el of this.edgeEls.values()) el.dataset.state = "idle";
+    for (const el of this.detailEls.values()) el.replaceChildren();
   }
 }

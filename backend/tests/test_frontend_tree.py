@@ -218,7 +218,8 @@ def test_layout_matches_the_tree_the_backend_serves(layout: dict[str, Any]) -> N
 def drawn() -> dict[str, Any]:
     if shutil.which("node") is None:
         pytest.skip("node is needed to run the frontend tree view")
-    return run_harness(default_config_path(), "--draw")["drawn"]
+    found: dict[str, Any] = run_harness(default_config_path(), "--draw")["drawn"]
+    return found
 
 
 @requires_node

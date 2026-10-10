@@ -190,8 +190,12 @@ All backend tests use `tests/fakes.py` instead, so the suite needs no model and 
   playback control serves are byte-identical to the upload, and by
   `tests/test_frontend_tree.py` (`tests/tree_fixture.mjs`), which runs the shipped tree
   layout over the real `config/tree.json` **and over mutated copies of it**, so a layout
-  that stopped following the config fails here. All four skip if `node` is missing, so a
-  green suite does not imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
+  that stopped following the config fails here, and by `tests/test_frontend_analysis.py`
+  (`tests/analysis_fixture.mjs`), which runs a **real traversal through `/api/analyze`** with
+  a scripted fake model, captures the response body verbatim, and replays it into the shipped
+  `sse.js`/`trace.js`/`analysis.js` — chopped into 1-, 7- and 64-byte chunks, because an SSE
+  frame boundary can land anywhere in a network read. That is where a renamed event field
+  gets caught. All five skip if `node` is missing, so a green suite does not imply they ran. **Any frontend limit that mirrors a backend constant should get a line in
   one of those two tests** — that is the only place the two sides are checked against
   each other.
 

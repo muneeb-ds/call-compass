@@ -4,9 +4,12 @@
 // still a labelled placeholder that a later story replaces. No bundler, no build
 // step — this is loaded directly as an ES module.
 
+import { Analysis } from "./analysis.js";
 import { MicrophoneError, Recorder } from "./capture.js";
 import { Playback } from "./playback.js";
+import { AnalyzeError } from "./sse.js";
 import { RecordingTimer } from "./timer.js";
+import { Trace } from "./trace.js";
 import { TreeView } from "./tree.js";
 import { Waveform } from "./waveform.js";
 
@@ -96,44 +99,17 @@ function setCaptureMessage(text, state = "error") {
 }
 
 /**
- * Sends the encoded WAV to the backend to confirm the format is accepted.
- *
- * Deliberately throws the response away: this story only establishes that the
- * client-side encoding satisfies the backend's validation. US-013 replaces this with
- * consuming the SSE stream.
- *
- * @param {Uint8Array} bytes
- * @returns {Promise<string>} a message for the Capture column
- */
-export async function verifyAccepted(bytes) {
-  const body = new FormData();
-  body.append("audio", new Blob([bytes], { type: "audio/wav" }), "utterance.wav");
-  const controller = new AbortController();
-  try {
-    const response = await fetch("/api/analyze", {
-      method: "POST",
-      body,
-      signal: controller.signal,
-    });
-    if (response.status === 400) {
-      const { detail } = await response.json();
-      return `Backend rejected the audio: ${detail}`;
-    }
-    return "";
-  } finally {
-    // The traversal stream itself is not this story's concern; drop it rather than
-    // leaving a half-read response open.
-    controller.abort();
-  }
-}
-
-/**
  * Wires the Capture column: record/stop button, live waveform, and the 30 s clock.
  *
  * One `toggle()` drives every transition, so the auto-stop at the ceiling takes
  * exactly the same path as a click on Stop.
+ *
+ * @param {{onRecording?: (recording: import("./capture.js").Recording) => Promise<void>}} [hooks]
+ *   `onRecording` is awaited inside the guarded toggle, so the Record button stays
+ *   disabled for as long as it runs — which is what keeps it disabled for a whole
+ *   traversal — and a throw from it lands in the same inline error path as a mic failure.
  */
-export function wireCapture() {
+export function wireCapture(hooks = {}) {
   const button = document.getElementById("record-button");
   const recorder = new Recorder();
   const waveform = new Waveform(
@@ -179,17 +155,14 @@ export function wireCapture() {
   async function stop() {
     recording = await recorder.stop();
     settle();
-    if (recording) playback.load(recording);
-    const problem = recording ? await verifyAccepted(recording.bytes) : "";
-    if (problem) {
-      setCaptureMessage(problem, "error");
-    } else if (recording) {
-      setCaptureMessage(
-        `Captured ${(recording.durationMs / 1000).toFixed(1)}s · ` +
-          `${recording.bytes.length} bytes · ${recording.sampleRate} Hz mono`,
-        "info",
-      );
-    }
+    if (!recording) return;
+    playback.load(recording);
+    setCaptureMessage(
+      `Captured ${(recording.durationMs / 1000).toFixed(1)}s · ` +
+        `${recording.bytes.length} bytes · ${recording.sampleRate} Hz mono`,
+      "info",
+    );
+    if (hooks.onRecording) await hooks.onRecording(recording);
   }
 
   /** Record <-> Stop. Re-entrant calls are dropped, including a click racing the auto-stop. */
@@ -223,6 +196,57 @@ export function wireCapture() {
   return { recorder, waveform, timer, playback, toggle, latest: () => recording };
 }
 
-checkHealth();
-loadTree();
-wireCapture();
+/**
+ * Builds the Trace column and the traversal runner.
+ *
+ * The tree may still be loading when the first recording stops, so the view is
+ * attached when its promise settles rather than being required up front — a run with
+ * no tree drawn still produces trace cards and a total.
+ *
+ * @param {Promise<{view: TreeView, tree: object}|null>} loading the `loadTree()` promise
+ * @returns {{analysis: Analysis, onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
+ */
+export function wireAnalysis(loading) {
+  const trace = new Trace(
+    document.getElementById("trace-total"),
+    document.getElementById("trace-list"),
+  );
+  const analysis = new Analysis(trace);
+  trace.reset();
+  void loading.then((loaded) => {
+    if (loaded) analysis.view = loaded.view;
+  });
+
+  /** @param {{bytes: Uint8Array}} recording */
+  async function onRecording(recording) {
+    await loading;
+    try {
+      await analysis.run(recording.bytes);
+      // An `error` event is a finished run, not a throw: the stream closed cleanly
+      // after it, so the UI reports it and stays usable rather than hanging.
+      if (analysis.error) setCaptureMessage(analysis.error.message, "error");
+    } catch (err) {
+      // An abort is a deliberate cancellation (Reset), not a failure to report.
+      if (err.name === "AbortError") return;
+      setCaptureMessage(
+        err instanceof AnalyzeError
+          ? `Backend rejected the audio: ${err.message}`
+          : `Analysis failed: ${err.message}`,
+        "error",
+      );
+    }
+  }
+
+  return { analysis, onRecording };
+}
+
+/** Page entry point. Exported so a later story can wire the same parts differently. */
+export function main() {
+  checkHealth();
+  const loading = loadTree();
+  const { analysis, onRecording } = wireAnalysis(loading);
+  const capture = wireCapture({ onRecording });
+  return { analysis, capture, loading };
+}
+
+main();

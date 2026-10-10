@@ -8,7 +8,7 @@ every file must be valid in the browser as-is.
 
 ```bash
 node --check frontend/*.js                 # syntax only
-cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback,tree}.py
+cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback,tree,analysis}.py
 ```
 
 `tests/test_frontend_audio.py` is the only automated coverage the audio pipeline has: it
@@ -59,13 +59,39 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `edgeKey(from, to)`. `TreeView(svg)` draws it; every node and edge starts at
   `data-state="idle"`, and highlighting stories should only flip `data-state` and add a
   CSS rule — never re-render to change a look. `reset()` returns everything to idle.
-- `app.js` — page wiring only. Exports its entry points (`checkHealth`, `wireCapture`) so a
-  later story can call them instead of re-deriving. `wireCapture()` returns
-  `{ recorder, waveform, timer, toggle, latest }` — US-011/US-013/US-016 should drive those
-  rather than re-querying the DOM.
+  `TreeView.annotate(id, lines)` writes the live detail under a node into a `<text>` that
+  was drawn **empty at render time**, for the same reason: filling text is not re-rendering.
+- `sse.js` — the **only** module that knows the `text/event-stream` wire format.
+  `streamAnalyze(bytes, {onEvent, signal, fetchImpl})` POSTs the WAV as multipart and calls
+  `onEvent` per frame; a non-200 becomes an `AnalyzeError` carrying the backend's `detail`.
+  `SseDecoder`/`parseFrame` are pure and **incremental** — a frame boundary can land anywhere
+  in a network read, so never parse by splitting a finished body. `fetchImpl` is injectable
+  purely so node can drive the real path.
+- `trace.js` — the Trace column. `humanize` / `formatArguments` / `formatLatency` /
+  `formatTotal` are pure and are the **single** naming of an option on screen; the tree
+  annotations and US-014's breadcrumb must reuse them rather than re-format. `Trace(totalEl,
+  listEl)` appends one card per step; `setTotal(ms)` overrides the accumulated figure with the
+  terminal event's authoritative `total_inference_ms`, which is also how a run with zero steps
+  still shows a total.
+- `analysis.js` — one run: SSE frames in, lit tree and trace cards out. Takes `Trace` and
+  `TreeView` as arguments and touches no DOM. **Nodes light on actual event arrival** — no
+  artificial delays, ever; the real per-call timing is what the demo exists to show. The leaf
+  gets no `step` of its own, so it lights on the terminal event. `onTerminal` / `onError` are
+  the hooks US-014/US-015 should subscribe to rather than re-reading the stream, and
+  `reset()` / `cancel()` are what US-016's button calls.
+- `app.js` — page wiring only. Exports its entry points (`checkHealth`, `loadTree`,
+  `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
+  re-deriving. `wireCapture({onRecording})` returns
+  `{ recorder, waveform, timer, playback, toggle, latest }`; `onRecording` is **awaited inside
+  the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
+  traversal without inventing a second flag. `main()` returns `{ analysis, capture, loading }`
+  — US-016 should drive those rather than re-querying the DOM.
 
 ## Conventions
 
+- **SVG text that sits over the graph gets a halo**, not a z-order fix: `paint-order: stroke`
+  plus a `stroke: var(--bg)` (see `.tree-detail`). Node groups already paint after the edge
+  layer, and it is still unreadable where a freshly-lit edge runs under the text.
 - **Capture failures are shown inline** in the Capture column (`#capture-message`).
   Never `alert()`, never a silent catch — a demo operator has to see on screen that the
   mic was denied.

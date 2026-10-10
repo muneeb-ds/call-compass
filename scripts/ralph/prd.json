@@ -237,7 +237,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "The centerpiece story. Nodes must light on actual event arrival - no artificial delays, since real per-call timing is the thing being demonstrated. Verify with a real recording end to end against the live backend."
     },
     {

@@ -344,6 +344,117 @@ body {
   font-weight: 500;
 }
 
+/* A node whose inference has returned: fully opaque, accent border. The ~120 ms
+ * transition is on `.tree-node` / `.tree-box` above, so the sequence is visible
+ * without the animation inflating the perceived total latency. */
+.tree-node[data-state="visited"] .tree-box {
+  fill: #16263c;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.tree-node[data-state="visited"][data-kind="leaf"] .tree-box {
+  fill: #11301d;
+  stroke: var(--ok);
+  stroke-width: 2;
+}
+
+/* Traversal stopped here without resolving: distinct from both visited and unvisited. */
+.tree-node[data-state="warning"] .tree-box {
+  fill: #2b2109;
+  stroke: var(--warn);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.tree-edge[data-state="visited"] {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+/* Option / argument / latency under a lit node. Monospace because the latency is the
+ * hero number and must not jitter as it appears. */
+.tree-detail {
+  fill: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  /* The detail sits in the row gap, which is exactly where this node's outgoing edge
+   * runs — and the edge is the one that just lit, so it is the brightest thing on
+   * screen. A halo in the page background keeps the figures readable across the room
+   * instead of relying on the node layer merely painting last. */
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Trace column: the pinned running total above a list of step cards. */
+.total {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: #11161d;
+  color: var(--accent);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.trace-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-height: 0;
+  overflow: auto;
+}
+
+.step {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: #11161d;
+}
+
+.step-node {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+/* Right-aligned latency badge. */
+.step-latency {
+  margin-left: auto;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #1b2330;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.step-option {
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+}
+
+.step-arg {
+  margin: 0.1rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
 /* Inline capture feedback: a denied mic or a rejected upload is reported here, in
  * the column it belongs to. Never an alert(). */
 .message {
