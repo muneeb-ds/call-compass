@@ -3,21 +3,111 @@
  * Dark background on purpose: the demo is projected in a conference room, and the
  * dimmed-vs-lit node contrast has to read from the back of the room. Latency figures
  * are the hero stat, so every number is monospace (see `.mono`).
+ *
+ * Every colour, font size, spacing value and radius below is a reference to a token
+ * defined in this block. Dark is the default theme; light is an override under
+ * `prefers-color-scheme: light`. Both are tuned to meet WCAG AA (4.5:1 body text,
+ * 3:1 at >=24px) against every surface they're used on.
  */
 
 :root {
+  /* Type scale. Two extra tokens (--text-tree-label, --text-detail) size the SVG
+   * labels, which sit slightly off the main scale because they're read at a fixed
+   * physical size regardless of the rest of the page. */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-tree-label: 11.5px;
+  --text-detail: 9px;
+
+  /* Spacing scale. */
+  --space-0: 0.05rem;
+  --space-1: 0.1rem;
+  --space-2: 0.2rem;
+  --space-3: 0.35rem;
+  --space-4: 0.4rem;
+  --space-5: 0.5rem;
+  --space-6: 0.6rem;
+  --space-7: 0.75rem;
+  --space-8: 1rem;
+  --space-9: 1.25rem;
+  --gap: var(--space-7);
+
+  /* Radius scale. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+  --radius: var(--radius-md);
+
+  /* Elevation scale. */
+  --elevation-1: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-2: 0 4px 12px rgb(0 0 0 / 35%);
+  --elevation-3: 0 12px 32px rgb(0 0 0 / 45%);
+
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Semantic colour tokens - dark theme (default). */
   --bg: #0d1117;
-  --panel: #151b23;
-  --panel-border: #252d38;
+  --surface: #151b23;
+  --surface-raised: #1b222c;
+  --border: #252d38;
   --text: #e6edf3;
   --text-dim: #8b949e;
   --accent: #58a6ff;
-  --ok: #3fb950;
-  --warn: #d29922;
-  --error: #f85149;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --gap: 0.75rem;
-  --radius: 10px;
+  --accent-dim: #1b2330;
+  --accent-fill: #16263c;
+  --warning: #d29922;
+  --warning-fill: #2b2109;
+  --warning-surface: #1c1709;
+  --warning-border: #6b531b;
+  --live: #f85149;
+  --error: var(--live);
+  --error-surface: #1d1211;
+  --error-border: #6b2320;
+  --success: #3fb950;
+  --success-fill: #16231b;
+  --success-fill-strong: #11301d;
+  --success-surface: #121c16;
+  --success-surface-raised: #16281c;
+  --success-border: #2b6b3c;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --surface-raised: #eaeef2;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-dim: #59636e;
+    --accent: #0969da;
+    --accent-dim: #ddf4ff;
+    --accent-fill: #ddf4ff;
+    --warning: #9a6700;
+    --warning-fill: #fff8c5;
+    --warning-surface: #fff8c5;
+    --warning-border: #d4a72c;
+    --live: #cf222e;
+    --error: var(--live);
+    --error-surface: #ffebe9;
+    --error-border: #ff8182;
+    --success: #1a7f37;
+    --success-fill: #dafbe1;
+    --success-fill-strong: #aceebb;
+    --success-surface: #dafbe1;
+    --success-surface-raised: #aceebb;
+    --success-border: #2a8a44;
+
+    /* Shadows read as mud on a light surface; keep elevation present but faint. */
+    --elevation-1: 0 1px 2px rgb(31 35 40 / 10%);
+    --elevation-2: 0 4px 12px rgb(31 35 40 / 12%);
+    --elevation-3: 0 12px 32px rgb(31 35 40 / 16%);
+  }
 }
 
 * {
@@ -36,40 +126,40 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.5;
 }
 
 .topbar {
   display: flex;
   align-items: baseline;
-  gap: 1rem;
-  padding: 0.75rem 1.25rem;
-  border-bottom: 1px solid var(--panel-border);
+  gap: var(--space-8);
+  padding: var(--space-7) var(--space-9);
+  border-bottom: 1px solid var(--border);
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
   letter-spacing: 0.02em;
 }
 
 .tagline {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* Backend readiness. `data-state` is set by app.js; nothing else styles this. */
 .status {
   margin: 0 0 0 auto;
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .status[data-state="ready"] {
-  color: var(--ok);
+  color: var(--success);
 }
 
 .status[data-state="error"] {
@@ -116,16 +206,17 @@ body {
   min-height: 0;
   min-width: 0;
   padding: var(--gap);
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--elevation-1);
   overflow: auto;
 }
 
 .column h2,
 .result h2 {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--text-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -139,10 +230,10 @@ body {
   place-items: center;
   min-height: 3rem;
   padding: var(--gap);
-  border: 1px dashed var(--panel-border);
+  border: 1px dashed var(--border);
   border-radius: var(--radius);
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   text-align: center;
 }
 
@@ -170,9 +261,9 @@ body {
 .record {
   width: 5.5rem;
   height: 5.5rem;
-  border-radius: 50%;
-  border: 2px solid var(--panel-border);
-  background: #1f2630;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border);
+  background: var(--surface-raised);
   color: var(--text);
   font: inherit;
   font-weight: 600;
@@ -189,8 +280,8 @@ body {
 }
 
 .record[data-recording="true"] {
-  background: var(--error);
-  border-color: var(--error);
+  background: var(--live);
+  border-color: var(--live);
   color: #fff;
   animation: pulse 1.4s ease-out infinite;
 }
@@ -198,17 +289,17 @@ body {
 /* Recording tell, readable from the back of the room: the halo grows and fades. */
 @keyframes pulse {
   from {
-    box-shadow: 0 0 0 0 rgb(248 81 73 / 55%);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 55%, transparent);
   }
   to {
-    box-shadow: 0 0 0 1.5rem rgb(248 81 73 / 0%);
+    box-shadow: 0 0 0 1.5rem color-mix(in srgb, var(--live) 0%, transparent);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .record[data-recording="true"] {
     animation: none;
-    box-shadow: 0 0 0 0.5rem rgb(248 81 73 / 35%);
+    box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--live) 35%, transparent);
   }
 }
 
@@ -217,7 +308,7 @@ body {
 .waveform {
   height: 5rem;
   padding: var(--gap);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -231,7 +322,7 @@ body {
 .timer {
   margin: 0;
   text-align: center;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
@@ -243,7 +334,7 @@ body {
   align-items: center;
   gap: var(--gap);
   padding: var(--gap);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -253,10 +344,10 @@ body {
 
 .play {
   min-width: 4.5rem;
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--panel-border);
+  padding: var(--space-3) var(--space-7);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #1f2630;
+  background: var(--surface-raised);
   color: var(--text);
   font: inherit;
   cursor: pointer;
@@ -292,8 +383,8 @@ body {
 
 .reset {
   flex: 1;
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--panel-border);
+  padding: var(--space-4) var(--space-7);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-dim);
@@ -318,7 +409,7 @@ body {
   display: flex;
   min-height: 0;
   padding: var(--gap);
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -328,7 +419,7 @@ body {
 }
 
 .tree-edge {
-  stroke: var(--panel-border);
+  stroke: var(--border);
   stroke-width: 1.5;
   transition: stroke 120ms ease-out, opacity 120ms ease-out;
 }
@@ -349,8 +440,8 @@ body {
 }
 
 .tree-box {
-  fill: #1b222c;
-  stroke: var(--panel-border);
+  fill: var(--surface-raised);
+  stroke: var(--border);
   stroke-width: 1;
   transition: fill 120ms ease-out, stroke 120ms ease-out, stroke-width 120ms ease-out;
 }
@@ -358,18 +449,18 @@ body {
 /* Leaves are pills in the recommendation accent, so they read as a different kind of
  * thing from the branch nodes above them. */
 .tree-node[data-kind="leaf"] .tree-box {
-  fill: #16231b;
-  stroke: #2b6b3c;
+  fill: var(--success-fill);
+  stroke: var(--success-border);
 }
 
 .tree-label {
   fill: var(--text);
-  font-size: 11.5px;
+  font-size: var(--text-tree-label);
   font-weight: 600;
 }
 
 .tree-node[data-kind="leaf"] .tree-label {
-  fill: var(--ok);
+  fill: var(--success);
   font-weight: 500;
 }
 
@@ -377,21 +468,21 @@ body {
  * transition is on `.tree-node` / `.tree-box` above, so the sequence is visible
  * without the animation inflating the perceived total latency. */
 .tree-node[data-state="visited"] .tree-box {
-  fill: #16263c;
+  fill: var(--accent-fill);
   stroke: var(--accent);
   stroke-width: 2;
 }
 
 .tree-node[data-state="visited"][data-kind="leaf"] .tree-box {
-  fill: #11301d;
-  stroke: var(--ok);
+  fill: var(--success-fill-strong);
+  stroke: var(--success);
   stroke-width: 2;
 }
 
 /* Traversal stopped here without resolving: distinct from both visited and unvisited. */
 .tree-node[data-state="warning"] .tree-box {
-  fill: #2b2109;
-  stroke: var(--warn);
+  fill: var(--warning-fill);
+  stroke: var(--warning);
   stroke-width: 2;
   stroke-dasharray: 5 3;
 }
@@ -407,7 +498,7 @@ body {
 .tree-detail {
   fill: var(--text-dim);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--text-detail);
   /* The detail sits in the row gap, which is exactly where this node's outgoing edge
    * runs — and the edge is the one that just lit, so it is the brightest thing on
    * screen. A halo in the page background keeps the figures readable across the room
@@ -421,12 +512,12 @@ body {
 /* Trace column: the pinned running total above a list of step cards. */
 .total {
   margin: 0;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--panel-border);
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #11161d;
+  background: var(--surface-raised);
   color: var(--accent);
-  font-size: 1.05rem;
+  font-size: var(--text-md);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -441,18 +532,18 @@ body {
 }
 
 .step {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--panel-border);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
-  background: #11161d;
+  background: var(--surface-raised);
 }
 
 .step-node {
   display: flex;
   align-items: baseline;
   gap: var(--gap);
-  font-size: 0.72rem;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
@@ -461,11 +552,11 @@ body {
 /* Right-aligned latency badge. */
 .step-latency {
   margin-left: auto;
-  padding: 0.05rem 0.35rem;
-  border-radius: 999px;
-  background: #1b2330;
+  padding: var(--space-0) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--accent-dim);
   color: var(--accent);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   text-transform: none;
   letter-spacing: 0;
@@ -473,14 +564,14 @@ body {
 }
 
 .step-option {
-  margin: 0.2rem 0 0;
+  margin: var(--space-2) 0 0;
   font-weight: 700;
 }
 
 .step-arg {
-  margin: 0.1rem 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   word-break: break-word;
 }
 
@@ -496,7 +587,7 @@ body {
   place-items: center;
   min-height: 3rem;
   padding: var(--gap);
-  border: 1px dashed var(--panel-border);
+  border: 1px dashed var(--border);
   border-radius: var(--radius);
   text-align: center;
 }
@@ -504,37 +595,37 @@ body {
 .result-empty {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* The recommendation itself: green-accented, and the recommendation text is the
  * largest thing on the page after the running total. */
 .result-card {
-  padding: 0.6rem 0.8rem;
-  border: 1px solid #2b6b3c;
-  border-left: 4px solid var(--ok);
+  padding: var(--space-6) var(--space-7);
+  border: 1px solid var(--success-border);
+  border-left: 4px solid var(--success);
   border-radius: var(--radius);
-  background: #121c16;
+  background: var(--success-surface);
 }
 
 .result-head {
   display: flex;
   align-items: baseline;
   gap: var(--gap);
-  font-size: 0.72rem;
+  font-size: var(--text-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ok);
+  color: var(--success);
 }
 
 .result-latency {
   margin-left: auto;
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-  background: #16281c;
-  color: var(--ok);
-  font-size: 0.8rem;
+  padding: var(--space-0) var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--success-surface-raised);
+  color: var(--success);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   text-transform: none;
   letter-spacing: 0;
@@ -545,26 +636,26 @@ body {
  * does not jump. There is no `.result-recommendation` in this state at all — the
  * reason line is the answer. */
 .result-slot[data-state="unplaced"] .result-card {
-  border-color: #6b531b;
-  border-left-color: var(--warn);
-  background: #1c1709;
+  border-color: var(--warning-border);
+  border-left-color: var(--warning);
+  background: var(--warning-surface);
 }
 
 .result-slot[data-state="unplaced"] .result-head,
 .result-slot[data-state="unplaced"] .result-latency {
-  color: var(--warn);
+  color: var(--warning);
 }
 
 .result-slot[data-state="unplaced"] .result-latency {
-  background: #2b2109;
+  background: var(--warning-fill);
 }
 
 /* The run broke, as opposed to the model declining: red, so the two are never
  * confused from the back of the room. */
 .result-slot[data-state="error"] .result-card {
-  border-color: #6b2320;
+  border-color: var(--error-border);
   border-left-color: var(--error);
-  background: #1d1211;
+  background: var(--error-surface);
 }
 
 .result-slot[data-state="error"] .result-head {
@@ -572,31 +663,31 @@ body {
 }
 
 .result-recommendation {
-  margin: 0.35rem 0 0;
-  font-size: 1.25rem;
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xl);
   line-height: 1.35;
 }
 
 /* Why the traversal stopped, or what failed. Larger than the rationale — in these two
  * states it is the only explanation on screen. */
 .result-reason {
-  margin: 0.35rem 0 0;
-  font-size: 1rem;
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-md);
   line-height: 1.4;
 }
 
 /* The chosen options, in order — the conversation the model heard. */
 .result-path {
-  margin: 0.4rem 0 0;
+  margin: var(--space-4) 0 0;
   color: var(--accent);
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   word-break: break-word;
 }
 
 .result-rationale {
-  margin: 0.35rem 0 0;
+  margin: var(--space-3) 0 0;
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -604,7 +695,7 @@ body {
  * the column it belongs to. Never an alert(). */
 .message {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   word-break: break-word;
 }
 

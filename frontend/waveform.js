@@ -5,9 +5,27 @@
 // that the mic is open but hearing nothing, which is otherwise indistinguishable
 // from a model misfire when the demo goes wrong.
 
-/** Idle baseline and live trace colours, matching styles.css. */
-const IDLE = "#8b949e";
-const LIVE = "#f85149";
+/** Idle baseline and live trace colour fallbacks, matching styles.css's defaults. */
+const IDLE_FALLBACK = "#8b949e";
+const LIVE_FALLBACK = "#f85149";
+
+/**
+ * Reads a colour token off the document's root element.
+ *
+ * Falls back when `getComputedStyle` isn't available (the node test harness has no
+ * DOM) or when the token resolves to nothing.
+ *
+ * @param {string} name CSS custom property name, e.g. "--text-dim"
+ * @param {string} fallback
+ * @returns {string}
+ */
+function readColorToken(name, fallback) {
+  if (typeof getComputedStyle !== "function" || typeof document === "undefined") {
+    return fallback;
+  }
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
 
 /**
  * Renders a time-domain waveform into one canvas.
@@ -25,6 +43,8 @@ export class Waveform {
     this.data = null;
     /** requestAnimationFrame handle, 0 when idle. */
     this.frame = 0;
+    this.idleColor = readColorToken("--text-dim", IDLE_FALLBACK);
+    this.liveColor = readColorToken("--live", LIVE_FALLBACK);
   }
 
   /**
@@ -85,7 +105,7 @@ export class Waveform {
     ctx.beginPath();
 
     if (!this.analyser || !this.data) {
-      ctx.strokeStyle = IDLE;
+      ctx.strokeStyle = this.idleColor;
       ctx.moveTo(0, middle);
       ctx.lineTo(width, middle);
       ctx.stroke();
@@ -93,7 +113,7 @@ export class Waveform {
     }
 
     this.analyser.getByteTimeDomainData(this.data);
-    ctx.strokeStyle = LIVE;
+    ctx.strokeStyle = this.liveColor;
     const step = width / (this.data.length - 1);
     for (let i = 0; i < this.data.length; i += 1) {
       // getByteTimeDomainData centres silence on 128; map [0, 255] onto the height.

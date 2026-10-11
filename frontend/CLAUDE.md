@@ -44,7 +44,11 @@ it can be pinned from pytest this way** — that is the only test runner this di
 - `waveform.js` — `Waveform(canvas)`: `start(analyser)` runs a `requestAnimationFrame` loop
   over `getByteTimeDomainData`, `stop()` leaves a flat gray baseline. Cosmetic only; it
   never reads or alters the captured samples. The canvas is sized by CSS and its backing
-  store is re-matched per frame, so never set `canvas.width`/`height` in HTML.
+  store is re-matched per frame, so never set `canvas.width`/`height` in HTML. Its two
+  trace colours are read once at construction via `readColorToken(name, fallback)`, which
+  calls `getComputedStyle(document.documentElement)` on the `styles.css` custom property
+  and falls back to the hardcoded hex when `getComputedStyle`/`document` don't exist (the
+  node test harness) - that fallback is what keeps this module node-testable without a DOM.
 - `playback.js` — `Playback(button, readout, audio)`: play/pause over the recording's own
   `blob`, so the operator hears the exact bytes the backend received. Takes its three DOM
   elements as arguments and never touches `document`, which is what lets node drive it with

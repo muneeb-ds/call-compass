@@ -38,7 +38,7 @@
         "Verify in browser using dev-browser skill: screenshot both light and dark themes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-018. Pure foundation story - it gates US-003 onward, so resist restructuring any markup here. Only styles.css and the two waveform.js constants change. The existing styles.css is 618 lines; convert it in place rather than rewriting from scratch, so no existing selector loses its rule."
     },
     {
