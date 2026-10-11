@@ -74,6 +74,28 @@ export class Waveform {
   }
 
   /**
+   * Holds whatever frame is currently drawn and stops reading the analyser, without
+   * settling to the idle baseline (US-028's "freezes rather than flatlines").
+   *
+   * Unlike `stop()`, `this.analyser`/`this.data` are kept so `unfreeze()` can resume
+   * the same trace.
+   */
+  freeze() {
+    if (this.frame) cancelAnimationFrame(this.frame);
+    this.frame = 0;
+  }
+
+  /** Resumes the live loop after a `freeze()`. No-op if there is nothing to resume. */
+  unfreeze() {
+    if (!this.analyser || this.frame) return;
+    const tick = () => {
+      this.frame = requestAnimationFrame(tick);
+      this.render();
+    };
+    tick();
+  }
+
+  /**
    * Matches the backing store to the canvas's laid-out size.
    *
    * The canvas is sized by CSS, so this has to run per frame: a window resize

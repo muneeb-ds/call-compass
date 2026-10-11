@@ -255,10 +255,9 @@ body {
   }
 }
 
-/* Pause/resume placeholder. US-013 wires the click handler and the paused look; this
- * story only settles the dock's final geometry, so the control sits disabled, styled
- * like the other secondary dock buttons (`.play`, `.reset`) rather than looking broken
- * or unfinished. */
+/* Pause/resume control, styled like the dock's other secondary buttons (`.play`,
+ * `.reset`) while idle, and switching to a warning treatment once pressed so the
+ * operator cannot mistake "paused" for "recording". */
 .pause-slot {
   display: flex;
 }
@@ -278,6 +277,20 @@ body {
   opacity: 0.45;
   color: var(--text-dim);
   cursor: default;
+}
+
+.pause[aria-pressed="true"] {
+  border-color: var(--warning);
+  background: var(--warning-surface);
+  color: var(--warning);
+}
+
+/* The dock's paused treatment: distinct from both idle (default border) and recording
+ * (the record button's own pulse carries that) so a paused take reads as held, not
+ * merely quiet. */
+.dock[data-state="paused"] {
+  border-color: var(--warning);
+  box-shadow: 0 0 0 1px var(--warning), var(--elevation-3);
 }
 
 /* Waveform. The canvas is sized entirely by CSS; waveform.js matches its backing

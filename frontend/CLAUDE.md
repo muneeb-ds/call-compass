@@ -80,6 +80,10 @@ it can be pinned from pytest this way** — that is the only test runner this di
   calls `getComputedStyle(document.documentElement)` on the `styles.css` custom property
   and falls back to the hardcoded hex when `getComputedStyle`/`document` don't exist (the
   node test harness) - that fallback is what keeps this module node-testable without a DOM.
+  `freeze()`/`unfreeze()` (US-028) pause the `requestAnimationFrame` loop without
+  clearing `this.analyser`/`this.data` the way `stop()` does, so the last live frame
+  stays on screen instead of settling to the idle baseline — that is what lets a
+  paused take read as "held", not "stopped".
 - `playback.js` — `Playback(button, readout, audio)`: play/pause over the recording's own
   `blob`, so the operator hears the exact bytes the backend received. Takes its three DOM
   elements as arguments and never touches `document`, which is what lets node drive it with
@@ -194,7 +198,8 @@ it can be pinned from pytest this way** — that is the only test runner this di
   itself rather than a fixed pixel constant, so it scales with whatever tree is loaded.
   `Viewport.enableManualControls({followButton, fitButton, doc})` is the DOM glue —
   pointer drag-to-pan, wheel/pinch-to-zoom (two simultaneous pointers), and the +/-
-  keys (ignored while `isTextInputFocused`) — and is reviewed, not node-tested, same
+  keys (ignored while `isTextInputFocused`, exported so `app.js`'s `Space`/`P` capture
+  shortcuts (US-028) reuse the same focus check) — and is reviewed, not node-tested, same
   split as `goTo`'s animation loop. Any manual pan/zoom/`fit()` calls
   `disableFollow()`, which enables the Follow button (per this file's "disabled, never
   hidden" rule, it is never `hidden`); `follow()` re-arms `following` and jumps back to
@@ -242,6 +247,17 @@ it can be pinned from pytest this way** — that is the only test runner this di
   those rather than re-querying the DOM.
   Teardown is never re-derived: `capture.reset()` and `Analysis.reset()` each own their half,
   and a story that adds UI should clear it from the owning half or from `Analysis.onReset`.
+  `wireCapture`'s `pauseToggle()` (US-028) shares `toggle()`'s `busy` flag by checking
+  it rather than setting it (`pause()`/`resume()` are synchronous), which is what drops
+  a pause click racing the auto-stop's `toggle()` call. `renderPause()` is the single
+  place the dock's `#dock` `data-state` (`idle`/`recording`/`paused`) and the pause
+  button's label/`aria-pressed`/`disabled` are derived from `recorder.recording`/
+  `recorder.paused` — call it anywhere either flag might have changed rather than
+  touching the button or the dock directly. The `Space`/`P` shortcuts live in a single
+  `document`-level `keydown` listener inside `wireCapture`, gated by `viewport.js`'s
+  exported `isTextInputFocused` (shared rather than reimplemented) and by
+  `preventDefault()`, which also suppresses a focused button's own native
+  space-activation so a focused Record/Pause button does not double-fire.
 
 ## Looking at the UI without a browser
 

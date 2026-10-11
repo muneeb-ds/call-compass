@@ -15,7 +15,7 @@ import { RecordingTimer } from "./timer.js";
 import { Trace } from "./trace.js";
 import { TraceRail, TracePanel } from "./trace-panel.js";
 import { TreeView } from "./tree.js";
-import { frameFor, Viewport } from "./viewport.js";
+import { frameFor, isTextInputFocused, Viewport } from "./viewport.js";
 import { Waveform } from "./waveform.js";
 
 /** @param {string} text @param {"loading"|"ready"|"error"} state */
@@ -116,7 +116,11 @@ function setCaptureMessage(text, state = "error") {
  *   traversal — and a throw from it lands in the same inline error path as a mic failure.
  */
 export function wireCapture(hooks = {}) {
+  const dock = document.getElementById("dock");
   const button = document.getElementById("record-button");
+  const pauseButton = /** @type {HTMLButtonElement} */ (
+    document.getElementById("pause-button")
+  );
   const recorder = new Recorder();
   const waveform = new Waveform(
     /** @type {HTMLCanvasElement} */ (document.getElementById("waveform-canvas")),
@@ -140,11 +144,45 @@ export function wireCapture(hooks = {}) {
     button.setAttribute("aria-pressed", String(isRecording));
   }
 
+  /**
+   * Reflects the recorder's pause state onto the pause button and the dock, per the
+   * PRD's dock state table: disabled unless a recording is in progress, labelled
+   * `Pause`/`Resume`, and the dock itself carries a `paused` look distinct from both
+   * `idle` and `recording` so it reads as unmistakably held, not merely idle.
+   */
+  function renderPause() {
+    const paused = recorder.paused;
+    pauseButton.disabled = !recorder.recording;
+    pauseButton.textContent = paused ? "Resume" : "Pause";
+    pauseButton.setAttribute("aria-pressed", String(paused));
+    dock.dataset.state = !recorder.recording ? "idle" : paused ? "paused" : "recording";
+  }
+
   /** Settles the UI back to its not-recording look. */
   function settle() {
     waveform.stop();
     timer.stop();
     render(false);
+    renderPause();
+  }
+
+  /**
+   * Pause <-> resume, without tearing anything down. Shares `toggle()`'s `busy` guard
+   * so a pause click cannot race the auto-stop firing at the ceiling, and is itself a
+   * no-op while nothing is recording.
+   */
+  function pauseToggle() {
+    if (busy || !recorder.recording) return;
+    if (recorder.paused) {
+      recorder.resume();
+      timer.resume();
+      waveform.unfreeze();
+    } else {
+      recorder.pause();
+      timer.pause();
+      waveform.freeze();
+    }
+    renderPause();
   }
 
   async function start() {
@@ -156,6 +194,7 @@ export function wireCapture(hooks = {}) {
     render(true);
     waveform.start(recorder.analyser);
     timer.start();
+    renderPause();
   }
 
   async function stop() {
@@ -207,11 +246,27 @@ export function wireCapture(hooks = {}) {
   }
 
   button.addEventListener("click", () => void toggle());
+  pauseButton.addEventListener("click", () => pauseToggle());
   playback.button.addEventListener("click", () => playback.toggle());
   // Keeps the trace spanning the column when the window changes size while idle.
   window.addEventListener("resize", () => waveform.render());
+  // Global shortcuts: Space mirrors the Record/Stop click, P mirrors Pause/Resume.
+  // Both are ignored while a text field has focus, and `preventDefault()` on the
+  // keydown also suppresses a focused button's own native space-activation, so a
+  // Record/Pause button that happens to have focus does not double-fire.
+  document.addEventListener("keydown", (event) => {
+    if (isTextInputFocused(document)) return;
+    if (event.code === "Space") {
+      event.preventDefault();
+      void toggle();
+    } else if (event.code === "KeyP") {
+      event.preventDefault();
+      pauseToggle();
+    }
+  });
 
   render(false);
+  renderPause();
   waveform.stop();
   timer.reset();
   /** Exposed for the later stories that need the captured bytes or the controls. */

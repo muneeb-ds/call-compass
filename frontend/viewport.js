@@ -148,7 +148,7 @@ export function zoomBox(box, factor, anchorX, anchorY, bounds) {
  *
  * @param {Document} doc
  */
-function isTextInputFocused(doc) {
+export function isTextInputFocused(doc) {
   const el = doc && doc.activeElement;
   if (!el) return false;
   return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable === true;

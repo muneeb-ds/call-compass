@@ -270,7 +270,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-028. Depends on US-011, US-012 and the dock from US-004. The PRD's dock state table is the spec for the four capture states (idle-no-take, recording, paused, idle-take-held) - implement it exactly. Reuse wireCapture's existing busy guard rather than adding a second one."
     },
     {
