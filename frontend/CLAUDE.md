@@ -85,20 +85,24 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `reset()` / `cancel()` are what US-016's button calls. An `error` event is a **finished**
   run (the backend always sends `done` after it), so `onError` fires and the stream resolves
   normally — never treat it as a throw or leave a spinner turning on it. It also records every step's
-  `tool_called` in `picks`, which is the result card's breadcrumb — the card must not
+  `tool_called` in `picks`, which is the outcome strip's breadcrumb — the strip must not
   re-derive the path from the terminal event's `path` (those are node ids).
-- `result.js` — the result area. `breadcrumb(picks)` / `formatEndToEnd(ms)` /
-  `reasonText(reason, label)` are pure; `ResultCard(container)` draws **only** from a
-  terminal event, so an in-flight run can never be read as a recommendation. The
-  breadcrumb names the **chosen options** (`humanize`d from `trace.js`), not the node
-  labels, and the card's latency is `total_latency_ms` (end to end) — deliberately a
+- `outcome.js` — the outcome strip, in the dock. `breadcrumb(picks)` / `formatEndToEnd(ms)` /
+  `formatInferenceCount(n)` / `reasonText(reason, label)` are pure; `OutcomeStrip(container)`
+  draws **only** from a terminal event, so an in-flight run can never be read as an answer.
+  The breadcrumb names the **chosen options** (`humanize`d from `trace.js`), not the node
+  labels, and the strip's latency is `total_latency_ms` (end to end) — deliberately a
   different number from the Trace column's inference-only total, which is why it is
-  labelled "end to end". `clear()` is the empty state and is wired to `Analysis.onReset`.
-  There are **three** terminal looks — `completed` (green), `unplaced` (amber),
-  `errored` (red) — and they share one markup shape; the accent comes from the slot's
-  `data-state`, so a new state is a CSS block plus a method, never new markup.
+  labelled "end to end". `clear()` is the **absent** state (no children, no `data-state`
+  at all — not an empty placeholder box) and is wired to `Analysis.onReset`. There are
+  **three** terminal looks — `completed` (green), `unplaced` (amber, with **no** leaf
+  label at all), `errored` (red) — and they share one line shape; the accent comes from
+  the container's `data-state`, so a new state is a CSS block plus a method, never new
+  markup. `.outcome-line` and its children truncate with `text-overflow: ellipsis`
+  rather than wrap, which is what keeps the strip to one line and the dock under its
+  ~15vh ceiling regardless of how long the breadcrumb or reason text gets.
   `STOP_REASONS` is keyed by the exact `StopReason` literals in
-  `callcompass/traversal.py` and `test_frontend_analysis.py` pins the two sets equal, so
+  `callcompass/traversal.py` and `test_frontend_outcome.py` pins the two sets equal, so
   **adding a backend stop reason fails here until the UI has a sentence for it**.
 - `reset.js` — the Reset button. `resetAll({analysis, capture})` is the teardown and is
   pure wiring, so its **order** is assertable from node: cancel the in-flight stream
@@ -114,7 +118,7 @@ it can be pinned from pytest this way** — that is the only test runner this di
   inside the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
   traversal without inventing a second flag. `wireAnalysis(loading, {onFinish})` reports a run
   ending by **any** route through that one hook. `main()` returns
-  `{ analysis, result, capture, reset, loading }` — drive those rather than re-querying the DOM.
+  `{ analysis, outcome, capture, reset, loading }` — drive those rather than re-querying the DOM.
   Teardown is never re-derived: `capture.reset()` and `Analysis.reset()` each own their half,
   and a story that adds UI should clear it from the owning half or from `Analysis.onReset`.
 

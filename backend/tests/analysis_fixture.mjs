@@ -23,8 +23,6 @@ const load = (name) => import(pathToFileURL(join(frontend, name)).href);
 const { TreeView } = await load("tree.js");
 const { Trace } = await load("trace.js");
 const { Analysis, stepDetail } = await load("analysis.js");
-const { ResultCard, STOP_REASONS, breadcrumb, formatEndToEnd, reasonText } =
-  await load("result.js");
 const { AnalyzeError, SseDecoder, parseFrame } = await load("sse.js");
 
 const arg = (name, fallback) => {
@@ -111,34 +109,19 @@ const listEl = element("div");
 const trace = new Trace(totalEl, listEl);
 const analysis = new Analysis(trace, view);
 
-// The result area, wired exactly as app.js wires it: drawn from the terminal event
-// only, cleared by reset().
-const resultEl = element("div");
-const result = new ResultCard(resultEl);
-result.clear();
-const resultEmpty = { state: resultEl.dataset.state, text: resultEl.children[0].textContent };
-analysis.onReset = () => result.clear();
-
 const frames = [];
-// The result area's state after each frame: it must stay empty until the terminal one.
-const resultStates = [];
 const handled = analysis.handle.bind(analysis);
 analysis.handle = (frame) => {
   frames.push([frame.event, frame.data]);
   if (frames.length === abortAfter) analysis.cancel();
-  const out = handled(frame);
-  resultStates.push([frame.event, resultEl.dataset.state]);
-  return out;
+  return handled(frame);
 };
 
 let terminal = null;
 let failure = null;
 analysis.onTerminal = (frame) => {
   terminal = frame.event;
-  if (frame.event === "completed") result.completed(frame.data, analysis.picks);
-  if (frame.event === "unplaced") result.unplaced(frame.data, analysis.picks);
 };
-analysis.onError = (payload) => result.errored(payload);
 try {
   await analysis.run(new Uint8Array([1, 2, 3]), { fetchImpl: fakeFetch });
 } catch (err) {
@@ -184,31 +167,6 @@ process.stdout.write(
     total: totalEl.textContent,
     cards: listEl.children.map(card),
     picks: analysis.picks,
-    resultEmpty,
-    resultStates,
-    // What the result card says, read back out of the stub elements. One reader for
-    // all three terminal looks, so "no recommendation on unplaced" is assertable.
-    result: (() => {
-      const state = resultEl.dataset.state;
-      const el = resultEl.children[0];
-      if (state === "empty") return { state, empty: el.textContent };
-      const text = (className) => {
-        const found = el.children.find((c) => c.className === className);
-        return found ? found.textContent : null;
-      };
-      const head = el.children.find((c) => c.className === "result-head");
-      const badge = head.children[0] || null;
-      return {
-        state,
-        label: head.textContent,
-        latency: badge && badge.textContent,
-        latencyClass: badge && badge.className,
-        recommendation: text("result-recommendation"),
-        reason: text("result-reason"),
-        path: text("result-path"),
-        rationale: text("result-rationale"),
-      };
-    })(),
     // Reset is US-016's button, but it has to undo everything above right now.
     afterReset: (() => {
       analysis.reset();
@@ -219,7 +177,6 @@ process.stdout.write(
         cards: listEl.children.length,
         total: totalEl.textContent,
         picks: analysis.picks,
-        result: { state: resultEl.dataset.state, text: resultEl.children[0].textContent },
       };
     })(),
     // The decoder on its own: a frame split anywhere must still arrive exactly once.
@@ -237,20 +194,6 @@ process.stdout.write(
       return got.map((f) => f.event);
     })(),
     noData: parseFrame("event: step"),
-    breadcrumb: {
-      three: breadcrumb(["pricing_question", "pro_tier", "budget_objection"]),
-      one: breadcrumb(["not_interested"]),
-      none: breadcrumb([]),
-    },
-    endToEnd: formatEndToEnd(497.6),
-    stopReasons: STOP_REASONS,
-    // Every backend reason code, plus one the UI has never heard of.
-    reasonText: Object.fromEntries(
-      [...Object.keys(STOP_REASONS), "something_new"].map((reason) => [
-        reason,
-        reasonText(reason, "Pricing concern"),
-      ]),
-    ),
     stepDetail: stepDetail({
       tool_called: "pricing_question",
       arguments: { pricing_focus: "plan_cost" },

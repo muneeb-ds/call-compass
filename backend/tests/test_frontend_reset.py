@@ -2,7 +2,7 @@
 
 Same harness shape as the other frontend tests: one traversal runs through
 `POST /api/analyze` with a scripted fake model, the response body is captured
-verbatim, and the *shipped* `reset.js` / `analysis.js` / `trace.js` / `result.js` are
+verbatim, and the *shipped* `reset.js` / `analysis.js` / `trace.js` / `outcome.js` are
 driven over it under node (`reset_fixture.mjs`).
 
 The assertions that matter here are sequential. "Reset clears the run" is easy to get
@@ -136,9 +136,9 @@ def test_reset_returns_the_tree_to_its_fully_dimmed_state(cycle: dict[str, Any])
 
 
 @requires_node
-def test_reset_clears_the_result_card(cycle: dict[str, Any]) -> None:
-    assert cycle["afterFirstRun"]["result"]["state"] == "completed"
-    assert cycle["afterReset"]["result"]["state"] == "empty"
+def test_reset_clears_the_outcome_strip(cycle: dict[str, Any]) -> None:
+    assert cycle["afterFirstRun"]["outcome"]["state"] == "completed"
+    assert cycle["afterReset"]["outcome"]["state"] is None
     assert cycle["afterReset"]["picks"] == []
     assert cycle["afterReset"]["terminal"] is None
 
@@ -162,7 +162,7 @@ def test_two_consecutive_runs_do_not_accumulate(happy_body: str, tmp_path: Path)
     assert second["picks"] == first["picks"]
     assert second["nodes"] == first["nodes"]
     assert second["annotated"] == first["annotated"]
-    assert second["result"] == first["result"]
+    assert second["outcome"] == first["outcome"]
     assert second["armed"] is True
 
 
@@ -189,7 +189,7 @@ def test_reset_cancels_an_in_flight_stream(happy_body: str, tmp_path: Path) -> N
     assert after["nodeStates"] == ["idle"]
     assert after["cards"] == []
     assert after["total"] == "Total: —"
-    assert after["result"]["state"] == "empty"
+    assert after["outcome"]["state"] is None
     assert after["captureResets"] == 1
     # A cancelled run is not a finished one, so Reset went back to disabled.
     assert after["armed"] is False
@@ -201,5 +201,5 @@ def test_a_full_run_still_works_after_a_cancelled_one(happy_body: str, tmp_path:
     second = result["afterSecondRun"]
     assert second["terminal"] == "completed"
     assert len(second["cards"]) == 4
-    assert second["result"]["state"] == "completed"
+    assert second["outcome"]["state"] == "completed"
     assert second["armed"] is True

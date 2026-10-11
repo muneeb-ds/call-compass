@@ -23,7 +23,7 @@ const load = (name) => import(pathToFileURL(join(frontend, name)).href);
 const { TreeView } = await load("tree.js");
 const { Trace } = await load("trace.js");
 const { Analysis } = await load("analysis.js");
-const { ResultCard } = await load("result.js");
+const { OutcomeStrip } = await load("outcome.js");
 const { ResetControl, resetAll } = await load("reset.js");
 
 const flag = (name) => process.argv.includes(`--${name}`);
@@ -97,10 +97,10 @@ const totalEl = element("p");
 const listEl = element("div");
 const trace = new Trace(totalEl, listEl);
 const analysis = new Analysis(trace, view);
-const resultEl = element("div");
-const result = new ResultCard(resultEl);
-result.clear();
-analysis.onReset = () => result.clear();
+const outcomeEl = element("p");
+const outcome = new OutcomeStrip(outcomeEl);
+outcome.clear();
+analysis.onReset = () => outcome.clear();
 
 // The capture half, stood in for: `resetAll` only needs `reset()`, and app.js's own
 // version of it is DOM wiring that cannot be loaded here. Counting the calls is what
@@ -131,12 +131,12 @@ analysis.handle = (frame) => {
 };
 
 analysis.onTerminal = (frame) => {
-  if (frame.event === "completed") result.completed(frame.data, analysis.picks);
-  if (frame.event === "unplaced") result.unplaced(frame.data, analysis.picks);
+  if (frame.event === "completed") outcome.completed(frame.data, analysis.picks);
+  if (frame.event === "unplaced") outcome.unplaced(frame.data, analysis.picks);
   control.arm();
 };
 analysis.onError = (payload) => {
-  result.errored(payload);
+  outcome.errored(payload);
   control.arm();
 };
 
@@ -145,7 +145,7 @@ const unique = (map) => [...new Set(Object.values(states(map)))].sort();
 
 /** Everything on screen, read back out of the stub elements. */
 function snapshot() {
-  const card = resultEl.children[0];
+  const line = outcomeEl.children[0];
   return {
     armed: control.armed,
     disabled: button.disabled,
@@ -162,7 +162,10 @@ function snapshot() {
     picks: analysis.picks,
     terminal: analysis.terminal && analysis.terminal.event,
     running: analysis.running,
-    result: { state: resultEl.dataset.state, text: card ? card.textContent : null },
+    outcome: {
+      state: outcomeEl.dataset.state ?? null,
+      text: line ? line.textContent : null,
+    },
     captureResets: capture.resets,
   };
 }

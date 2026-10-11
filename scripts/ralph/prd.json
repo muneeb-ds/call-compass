@@ -103,7 +103,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-022. Depends on US-001 (the completed event no longer carries recommendation) and US-004 (the dock hosts the strip). This is a deletion story as much as an addition: result.js is imported by app.js and has a dedicated test surface, so the module, its wiring, its CSS and its assertions must all go in the same commit - a dead ResultCard import breaks the page, not just the tests. Open question from the PRD, decide and note the choice: the strip could instead live on the stage near the reached leaf, which is more legible and more work. The dock is the specified default."
     },
     {

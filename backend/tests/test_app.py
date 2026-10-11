@@ -124,7 +124,7 @@ def test_root_serves_the_frontend_shell() -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     body = response.text
-    # The status bar, the tree stage, and the capture/trace/result surfaces it floats
+    # The status bar, the tree stage, and the capture/trace/outcome surfaces it floats
     # over, plus the no-build-step ES module entry.
     for marker in (
         "health-dot",
@@ -132,7 +132,7 @@ def test_root_serves_the_frontend_shell() -> None:
         "tree-canvas",
         "record-button",
         "trace-list",
-        "result-slot",
+        "outcome-strip",
     ):
         assert marker in body
     assert 'type="module"' in body
@@ -147,7 +147,7 @@ def test_frontend_assets_are_served() -> None:
             ("/sse.js", "javascript"),
             ("/trace.js", "javascript"),
             ("/analysis.js", "javascript"),
-            ("/result.js", "javascript"),
+            ("/outcome.js", "javascript"),
             ("/reset.js", "javascript"),
         ):
             response = client.get(path)

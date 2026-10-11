@@ -19,13 +19,12 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from callcompass.main import create_app
-from callcompass.traversal import StopReason
 from callcompass.tree import default_config_path
 
 from .fakes import EMPTY_RESPONSE, NONE_OF_THESE_CALL, fake_engine, make_wav, picks
@@ -310,136 +309,5 @@ def test_step_detail_formats_the_latency_as_an_integer(happy: dict[str, Any]) ->
 
 
 @requires_node
-def test_completed_result_is_labelled_with_the_leaf_it_reached(happy: dict[str, Any]) -> None:
-    (completed,) = [data for name, data in happy["frames"] if name == "completed"]
-    card = happy["result"]
-    assert card["state"] == "completed"
-    assert card["label"] == completed["label"]
-
-
-@requires_node
-def test_result_card_breadcrumb_names_the_chosen_options(happy: dict[str, Any]) -> None:
-    # Option labels, not node labels: the breadcrumb reads as the conversation.
-    assert happy["picks"] == [
-        "pricing_question",
-        "plan_cost_question",
-        "pro_tier",
-        "budget_objection",
-    ]
-    assert happy["result"]["path"] == (
-        "Pricing question → Plan cost question → Pro tier → Budget objection"
-    )
-
-
-@requires_node
-def test_result_card_shows_end_to_end_latency_in_monospace(happy: dict[str, Any]) -> None:
-    (completed,) = [data for name, data in happy["frames"] if name == "completed"]
-    # End-to-end, i.e. the request clock — not the trace column's inference-only total.
-    assert happy["result"]["latency"] == f"{completed['total_latency_ms']} ms end to end"
-    assert happy["result"]["latencyClass"] == "result-latency mono"
-    assert completed["total_latency_ms"] >= completed["total_inference_ms"]
-
-
-@requires_node
-def test_result_card_renders_only_after_the_terminal_event(happy: dict[str, Any]) -> None:
-    assert happy["resultEmpty"]["state"] == "empty"
-    assert happy["resultEmpty"]["text"].startswith("The recommendation appears here")
-    # Empty through `started` and every `step`; a card only once `completed` arrives.
-    assert happy["resultStates"] == [
-        ["started", "empty"],
-        ["step", "empty"],
-        ["step", "empty"],
-        ["step", "empty"],
-        ["step", "empty"],
-        ["completed", "completed"],
-        ["done", "completed"],
-    ]
-
-
-@requires_node
-def test_unplaced_card_names_the_node_and_the_reason(
-    unplaced_body: str, tmp_path: Path
-) -> None:
-    result = run_harness(unplaced_body, tmp_path)
-    (unplaced,) = [data for name, data in result["frames"] if name == "unplaced"]
-    card = result["result"]
-    assert card["state"] == "unplaced"
-    assert card["label"] == "Couldn't place this"
-    # The node it stopped on, by its label, and the reason in plain language.
-    assert unplaced["stopped_at_label"] in card["reason"]
-    assert unplaced["reason"] == "none_of_these"
-    assert "none of these options" in card["reason"]
-    assert card["latency"] == f"{unplaced['total_latency_ms']} ms end to end"
-
-
-@requires_node
-def test_unplaced_run_shows_no_recommendation(unplaced_body: str, tmp_path: Path) -> None:
-    """The model declined; inventing a next-best line here is the dishonesty to avoid."""
-    result = run_harness(unplaced_body, tmp_path)
-    assert result["result"]["recommendation"] is None
-    assert result["result"]["rationale"] is None
-    # Declined at the root, so no option was ever chosen either.
-    assert result["result"]["path"] is None
-    assert result["picks"] == []
-
-
-@requires_node
-def test_unplaced_card_keeps_the_breadcrumb_reached_so_far(tmp_path: Path) -> None:
-    result = run_harness(analyze([HAPPY_SCRIPT[0], EMPTY_RESPONSE]), tmp_path)
-    card = result["result"]
-    assert card["state"] == "unplaced"
-    assert card["path"] == "Pricing question"
-    assert "Pricing concern" in card["reason"]
-    assert "no answer" in card["reason"]
-    assert card["recommendation"] is None
-
-
-@requires_node
-def test_unplaced_card_reports_an_unrecognized_tool(tmp_path: Path) -> None:
-    result = run_harness(analyze([picks("not_a_real_option")]), tmp_path)
-    (unplaced,) = [data for name, data in result["frames"] if name == "unplaced"]
-    assert unplaced["reason"] == "unknown_tool"
-    assert "does not offer" in result["result"]["reason"]
-
-
-@requires_node
-def test_every_backend_stop_reason_has_plain_language(happy: dict[str, Any]) -> None:
-    """The four reasons the UI explains are exactly the four the backend can send."""
-    assert set(happy["stopReasons"]) == set(get_args(StopReason))
-    for reason, sentence in happy["reasonText"].items():
-        assert sentence.startswith("Stopped at “Pricing concern”: ")
-        assert reason != "something_new" or "something_new" in sentence
-    # An unknown code still reads as a sentence rather than "undefined".
-    assert "undefined" not in happy["reasonText"]["something_new"]
-
-
-@requires_node
-def test_error_event_renders_a_recoverable_card(error_body: str, tmp_path: Path) -> None:
-    """`error` is a finished run, so it ends in a readable card — not a hung spinner."""
-    result = run_harness(error_body, tmp_path)
-    card = result["result"]
-    assert card["state"] == "error"
-    assert card["label"] == "Run failed"
-    assert card["reason"] == result["error"]["message"]
-    assert card["recommendation"] is None
-    # No end-to-end figure: an `error` event carries no total.
-    assert card["latency"] is None
-    assert result["afterReset"]["result"]["state"] == "empty"
-
-
-@requires_node
-def test_reset_clears_the_result_card_and_the_breadcrumb(happy: dict[str, Any]) -> None:
-    after = happy["afterReset"]
-    assert after["picks"] == []
-    assert after["result"]["state"] == "empty"
-    assert after["result"]["text"].startswith("The recommendation appears here")
-
-
-@requires_node
-def test_breadcrumb_and_latency_formatting(happy: dict[str, Any]) -> None:
-    assert happy["breadcrumb"] == {
-        "three": "Pricing question → Pro tier → Budget objection",
-        "one": "Not interested",
-        "none": "",
-    }
-    assert happy["endToEnd"] == "498 ms end to end"
+def test_reset_clears_the_breadcrumb(happy: dict[str, Any]) -> None:
+    assert happy["afterReset"]["picks"] == []

@@ -7,8 +7,8 @@
 import { Analysis } from "./analysis.js";
 import { MicrophoneError, Recorder } from "./capture.js";
 import { Playback } from "./playback.js";
+import { OutcomeStrip } from "./outcome.js";
 import { ResetControl, resetAll } from "./reset.js";
-import { ResultCard } from "./result.js";
 import { AnalyzeError } from "./sse.js";
 import { RecordingTimer } from "./timer.js";
 import { Trace } from "./trace.js";
@@ -226,7 +226,7 @@ export function wireCapture(hooks = {}) {
  * @param {{onFinish?: () => void}} [hooks] `onFinish` is called once a run has ended by
  *   any route — a terminal event, an `error` event, or a rejected upload — which is
  *   what arms the Reset button. A cancelled run is not a finish and does not call it.
- * @returns {{analysis: Analysis, result: ResultCard,
+ * @returns {{analysis: Analysis, outcome: OutcomeStrip,
  *            onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
  */
 export function wireAnalysis(loading, hooks = {}) {
@@ -237,22 +237,22 @@ export function wireAnalysis(loading, hooks = {}) {
     document.getElementById("trace-total"),
     document.getElementById("trace-list"),
   );
-  const result = new ResultCard(document.getElementById("result-slot"));
+  const outcome = new OutcomeStrip(document.getElementById("outcome-strip"));
   const analysis = new Analysis(trace);
   trace.reset();
-  result.clear();
-  // The card is drawn from the terminal event only, so an in-flight run never shows a
-  // recommendation; `reset()` (a new run, or US-016's button) takes it away again.
-  analysis.onReset = () => result.clear();
+  outcome.clear();
+  // The strip is drawn from the terminal event only, so an in-flight run never shows
+  // an outcome; `reset()` (a new run, or US-016's button) takes it away again.
+  analysis.onReset = () => outcome.clear();
   analysis.onTerminal = (frame) => {
-    if (frame.event === "completed") result.completed(frame.data, analysis.picks);
-    if (frame.event === "unplaced") result.unplaced(frame.data, analysis.picks);
+    if (frame.event === "completed") outcome.completed(frame.data, analysis.picks);
+    if (frame.event === "unplaced") outcome.unplaced(frame.data, analysis.picks);
     finished();
   };
-  // An `error` event is a finished run, so it gets a card of its own rather than
-  // leaving the result area on its pre-run empty state as if nothing had happened.
+  // An `error` event is a finished run, so it gets a strip of its own rather than
+  // leaving the dock on its pre-run absent state as if nothing had happened.
   analysis.onError = (payload) => {
-    result.errored(payload);
+    outcome.errored(payload);
     finished();
   };
   void loading.then((loaded) => {
@@ -283,7 +283,7 @@ export function wireAnalysis(loading, hooks = {}) {
     }
   }
 
-  return { analysis, result, onRecording };
+  return { analysis, outcome, onRecording };
 }
 
 /** Page entry point. Exported so a later story can wire the same parts differently. */
@@ -296,12 +296,12 @@ export function main() {
     /** @type {HTMLButtonElement} */ (document.getElementById("reset-button")),
     () => resetAll({ analysis, capture }),
   );
-  const { analysis, result, onRecording } = wireAnalysis(loading, {
+  const { analysis, outcome, onRecording } = wireAnalysis(loading, {
     onFinish: () => reset.arm(),
   });
   const capture = wireCapture({ onRecording });
   reset.button.addEventListener("click", () => reset.trigger());
-  return { analysis, result, capture, reset, loading };
+  return { analysis, outcome, capture, reset, loading };
 }
 
 main();

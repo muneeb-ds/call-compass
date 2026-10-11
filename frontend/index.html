@@ -46,16 +46,13 @@
         <div class="reset-slot" id="reset-slot">
           <button type="button" id="reset-button" class="reset" disabled>Reset</button>
         </div>
+        <p class="outcome" id="outcome-strip" aria-live="polite"></p>
       </section>
 
       <aside class="trace-area" aria-label="Trace">
         <p class="total mono" id="trace-total">Total: &mdash;</p>
         <div class="trace-list" id="trace-list" role="log" aria-live="polite"></div>
       </aside>
-
-      <div class="result-slot" id="result-slot" data-state="empty" aria-live="polite">
-        <p class="result-empty">The recommendation appears here once a run finishes.</p>
-      </div>
     </main>
 
     <script type="module" src="./app.js"></script>

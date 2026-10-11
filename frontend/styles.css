@@ -460,15 +460,6 @@ body {
   overflow: auto;
 }
 
-.result-slot {
-  position: absolute;
-  left: var(--space-8);
-  bottom: var(--space-8);
-  z-index: 2;
-  max-width: 24rem;
-  box-shadow: var(--elevation-2);
-}
-
 .tree-edge {
   stroke: var(--border);
   stroke-width: 1.5;
@@ -626,120 +617,74 @@ body {
   word-break: break-word;
 }
 
-/* Result area: empty until a terminal event, then one card. The slot keeps the same
- * dashed outline as the other empty states so the area does not change shape. */
-.result-slot {
-  display: flex;
-  flex-direction: column;
-}
-
-.result-slot[data-state="empty"] {
-  display: grid;
-  place-items: center;
-  min-height: 3rem;
-  padding: var(--gap);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  text-align: center;
-}
-
-.result-empty {
+/* The outcome strip: absent until a terminal event draws one line of text into it, in
+ * the dock, beside the controls that produced it. No dashed empty box for the "before
+ * the first run" state - the dock already has its shape from the controls alone. */
+.outcome {
   margin: 0;
-  color: var(--text-dim);
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 28rem;
+  color: var(--text);
   font-size: var(--text-sm);
+  overflow: hidden;
 }
 
-/* The recommendation itself: green-accented, and the recommendation text is the
- * largest thing on the page after the running total. */
-.result-card {
-  padding: var(--space-6) var(--space-7);
-  border: 1px solid var(--success-border);
-  border-left: 4px solid var(--success);
-  border-radius: var(--radius);
-  background: var(--success-surface);
-}
-
-.result-head {
+/* A genuinely single line: it truncates rather than wrapping the dock taller, which
+ * would push it past the ~15vh ceiling `.dock` caps itself at. */
+.outcome-line {
   display: flex;
   align-items: baseline;
-  gap: var(--gap);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--success);
-}
-
-.result-latency {
-  margin-left: auto;
-  padding: var(--space-0) var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--success-surface-raised);
-  color: var(--success);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  text-transform: none;
-  letter-spacing: 0;
+  gap: var(--space-5);
+  margin: 0;
+  overflow: hidden;
   white-space: nowrap;
 }
 
-/* Declined: amber, and the same card shape as the recommendation so the result area
- * does not jump. There is no `.result-recommendation` in this state at all — the
- * reason line is the answer. */
-.result-slot[data-state="unplaced"] .result-card {
-  border-color: var(--warning-border);
-  border-left-color: var(--warning);
-  background: var(--warning-surface);
+.outcome-label {
+  flex-shrink: 0;
+  font-weight: 700;
 }
 
-.result-slot[data-state="unplaced"] .result-head,
-.result-slot[data-state="unplaced"] .result-latency {
+/* The leaf reached: green, same accent family as the leaf pill on the tree itself. */
+.outcome[data-state="completed"] .outcome-label {
+  color: var(--success);
+}
+
+/* Declined: amber. There is no leaf label in this state at all - the reason line is
+ * the answer. */
+.outcome[data-state="unplaced"] .outcome-label {
   color: var(--warning);
-}
-
-.result-slot[data-state="unplaced"] .result-latency {
-  background: var(--warning-fill);
 }
 
 /* The run broke, as opposed to the model declining: red, so the two are never
  * confused from the back of the room. */
-.result-slot[data-state="error"] .result-card {
-  border-color: var(--error-border);
-  border-left-color: var(--error);
-  background: var(--error-surface);
-}
-
-.result-slot[data-state="error"] .result-head {
+.outcome[data-state="error"] .outcome-label {
   color: var(--error);
 }
 
-.result-recommendation {
-  margin: var(--space-3) 0 0;
-  font-size: var(--text-xl);
-  line-height: 1.35;
+/* The chosen options, in order - the conversation the model heard. Truncates rather
+ * than wraps, same reason as `.outcome-line`. */
+.outcome-path,
+.outcome-reason {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Why the traversal stopped, or what failed. Larger than the rationale — in these two
- * states it is the only explanation on screen. */
-.result-reason {
-  margin: var(--space-3) 0 0;
-  font-size: var(--text-md);
-  line-height: 1.4;
-}
-
-/* The chosen options, in order — the conversation the model heard. */
-.result-path {
-  margin: var(--space-4) 0 0;
+.outcome-path {
   color: var(--accent);
-  font-size: var(--text-base);
-  word-break: break-word;
 }
 
-.result-rationale {
-  margin: var(--space-3) 0 0;
+.outcome-reason {
   color: var(--text-dim);
-  font-size: var(--text-sm);
-  line-height: 1.45;
+}
+
+.outcome-count,
+.outcome-latency {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 /* Inline capture feedback: a denied mic or a rejected upload is reported here, in
