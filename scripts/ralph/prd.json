@@ -59,7 +59,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-019, first half. Split from the dock assembly so one iteration is not rewriting index.html, styles.css and app.js wiring at once. Keep every id intact here - that is what lets the capture/trace/result JS keep working untouched while the shell moves around it. app.js's getElementById calls are the contract; if an id must change, update its consumer in the same commit."
     },
     {

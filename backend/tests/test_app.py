@@ -124,8 +124,16 @@ def test_root_serves_the_frontend_shell() -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     body = response.text
-    # The three columns plus the result area, and the no-build-step ES module entry.
-    for marker in ("capture-heading", "tree-heading", "trace-heading", "result-heading"):
+    # The status bar, the tree stage, and the capture/trace/result surfaces it floats
+    # over, plus the no-build-step ES module entry.
+    for marker in (
+        "health-dot",
+        "health-status",
+        "tree-canvas",
+        "record-button",
+        "trace-list",
+        "result-slot",
+    ):
         assert marker in body
     assert 'type="module"' in body
 

@@ -130,120 +130,59 @@ body {
   line-height: 1.5;
 }
 
-.topbar {
+/* Thin single-row status bar: health dot + a mono readout app.js fills with
+ * `tree_id · node_count nodes · model N ms` (see checkHealth()). */
+.statusbar {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-8);
-  padding: var(--space-7) var(--space-9);
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-8);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-.topbar h1 {
+/* Health dot. `data-state` is set by app.js alongside `#health-status`; nothing else
+ * styles this. */
+.statusbar-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: var(--radius-full);
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.statusbar-dot[data-state="ready"] {
+  background: var(--success);
+}
+
+.statusbar-dot[data-state="error"] {
+  background: var(--error);
+}
+
+.statusbar-text {
   margin: 0;
-  font-size: var(--text-lg);
-  letter-spacing: 0.02em;
-}
-
-.tagline {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: var(--text-sm);
-}
-
-/* Backend readiness. `data-state` is set by app.js; nothing else styles this. */
-.status {
-  margin: 0 0 0 auto;
-  font-family: var(--mono);
   font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
-.status[data-state="ready"] {
+.statusbar-text[data-state="ready"] {
   color: var(--success);
 }
 
-.status[data-state="error"] {
+.statusbar-text[data-state="error"] {
   color: var(--error);
 }
 
-/* Three columns at 25 / 50 / 25, with the result area below the tree spanning the
- * center and right columns. Capture spans both rows so its Reset slot can sit at the
- * bottom of the window. */
-.layout {
+/* The tree stage: a full-bleed area under the status bar. The SVG container fills it
+ * edge to edge (`inset: 0`) so nothing here imposes a fixed-height column; the
+ * capture/trace/result surfaces float over it as absolutely-positioned overlays so
+ * they never take layout space away from the stage. Their dock/panel chrome is built
+ * out in US-004/US-006 - here they are only positioned well enough to stay usable. */
+.stage {
+  position: relative;
   flex: 1;
   min-height: 0;
-  display: grid;
-  gap: var(--gap);
-  padding: var(--gap);
-  grid-template-columns: 25fr 50fr 25fr;
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "capture tree  trace"
-    "capture result result";
-}
-
-.capture {
-  grid-area: capture;
-}
-
-.tree {
-  grid-area: tree;
-}
-
-.trace {
-  grid-area: trace;
-}
-
-.result {
-  grid-area: result;
-}
-
-.column,
-.result {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  min-height: 0;
-  min-width: 0;
-  padding: var(--gap);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--elevation-1);
-  overflow: auto;
-}
-
-.column h2,
-.result h2 {
-  margin: 0;
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-}
-
-/* Labelled empty slots. Later stories replace the contents of each `#*-slot`; the
- * dashed outline makes it obvious at a glance what is not wired up yet. */
-.placeholder {
-  display: grid;
-  place-items: center;
-  min-height: 3rem;
-  padding: var(--gap);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  color: var(--text-dim);
-  font-size: var(--text-sm);
-  text-align: center;
-}
-
-.placeholder.grow {
-  flex: 1;
-}
-
-/* Pushes a slot to the foot of its column, whatever is above it. */
-.bottom {
-  margin-top: auto;
+  overflow: hidden;
 }
 
 .mono {
@@ -403,19 +342,82 @@ body {
 }
 
 /* Decision tree. The SVG is laid out in its own viewBox units by tree.js and scaled
- * to whatever the center column gives it, so nothing here knows the tree's shape.
- * Visited/warning states are driven entirely by `data-state` on the groups. */
+ * to whatever the stage gives it, so nothing here knows the tree's shape. Visited/
+ * warning states are driven entirely by `data-state` on the groups. `.grow` fills the
+ * stage edge to edge so the tree is the only thing that ever claims the stage's
+ * layout space - every other surface on the stage floats over it. */
 .tree-graph {
   display: flex;
   min-height: 0;
   padding: var(--gap);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+}
+
+.tree-graph.grow {
+  position: absolute;
+  inset: 0;
 }
 
 .tree-graph svg {
   width: 100%;
   height: 100%;
+}
+
+/* `#tree-message` is a top banner over the stage, shown only on a load failure. */
+.stage > .message {
+  position: absolute;
+  top: var(--space-8);
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-2);
+}
+
+/* Capture and trace float over the stage as temporary surfaces; US-004 turns the
+ * capture area into the floating dock and US-006 turns the trace area into the
+ * slide-over panel. Both keep the same flex-column shape `.column` used to give them. */
+.capture-area,
+.trace-area {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  gap: var(--gap);
+  padding: var(--gap);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-2);
+}
+
+.capture-area {
+  left: 50%;
+  bottom: var(--space-8);
+  align-items: center;
+  transform: translateX(-50%);
+  max-width: calc(100% - var(--space-9) * 2);
+  overflow-x: auto;
+}
+
+.trace-area {
+  top: var(--space-8);
+  right: var(--space-8);
+  bottom: var(--space-8);
+  width: 20rem;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.result-slot {
+  position: absolute;
+  left: var(--space-8);
+  bottom: var(--space-8);
+  z-index: 2;
+  max-width: 24rem;
+  box-shadow: var(--elevation-2);
 }
 
 .tree-edge {

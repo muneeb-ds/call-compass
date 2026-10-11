@@ -20,6 +20,7 @@ function setStatus(text, state) {
   const el = document.getElementById("health-status");
   el.textContent = text;
   el.dataset.state = state;
+  document.getElementById("health-dot").dataset.state = state;
 }
 
 /**

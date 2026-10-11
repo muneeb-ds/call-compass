@@ -7,15 +7,20 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <h1>CallCompass</h1>
-      <p class="tagline">On-device speech &rarr; tool call &rarr; next best thing to say.</p>
-      <p class="status" id="health-status" data-state="loading">Checking backend&hellip;</p>
+    <header class="statusbar">
+      <span class="statusbar-dot" id="health-dot" data-state="loading" aria-hidden="true"></span>
+      <p class="statusbar-text mono" id="health-status" data-state="loading">
+        Checking backend&hellip;
+      </p>
     </header>
 
-    <main class="layout">
-      <section class="column capture" aria-labelledby="capture-heading">
-        <h2 id="capture-heading">Capture</h2>
+    <main class="stage">
+      <p class="message" id="tree-message" data-state="error" role="status" hidden></p>
+      <div class="tree-graph grow" id="tree-slot">
+        <svg id="tree-canvas" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+
+      <section class="capture-area" aria-label="Capture">
         <div class="record-slot" id="record-slot">
           <button type="button" id="record-button" class="record" aria-pressed="false">
             Record
@@ -33,31 +38,19 @@
           <p class="playback-time mono" id="playback-time">0:00 / 0:00</p>
           <audio id="playback-audio" preload="auto"></audio>
         </div>
-        <div class="reset-slot bottom" id="reset-slot">
+        <div class="reset-slot" id="reset-slot">
           <button type="button" id="reset-button" class="reset" disabled>Reset</button>
         </div>
       </section>
 
-      <section class="column tree" aria-labelledby="tree-heading">
-        <h2 id="tree-heading">Tree</h2>
-        <p class="message" id="tree-message" data-state="error" role="status" hidden></p>
-        <div class="tree-graph grow" id="tree-slot">
-          <svg id="tree-canvas" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="column trace" aria-labelledby="trace-heading">
-        <h2 id="trace-heading">Trace</h2>
+      <aside class="trace-area" aria-label="Trace">
         <p class="total mono" id="trace-total">Total: &mdash;</p>
         <div class="trace-list" id="trace-list" role="log" aria-live="polite"></div>
-      </section>
+      </aside>
 
-      <section class="result" aria-labelledby="result-heading">
-        <h2 id="result-heading">Result</h2>
-        <div class="result-slot" id="result-slot" data-state="empty" aria-live="polite">
-          <p class="result-empty">The recommendation appears here once a run finishes.</p>
-        </div>
-      </section>
+      <div class="result-slot" id="result-slot" data-state="empty" aria-live="polite">
+        <p class="result-empty">The recommendation appears here once a run finishes.</p>
+      </div>
     </main>
 
     <script type="module" src="./app.js"></script>
