@@ -391,6 +391,46 @@ body {
 .tree-graph svg {
   width: 100%;
   height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.tree-graph svg:active {
+  cursor: grabbing;
+}
+
+/* Follow/Fit: the two manual-camera controls, pinned over the stage's bottom-left so
+ * they never collide with the trace rail (top/right) or the dock (bottom-centre).
+ * Follow starts disabled, never hidden (see frontend/CLAUDE.md's "no data yet" rule) —
+ * it only lights up once a manual pan/zoom/Fit has actually happened. */
+.viewport-controls {
+  position: absolute;
+  z-index: 3;
+  left: var(--space-8);
+  bottom: var(--space-8);
+  display: flex;
+  gap: var(--space-5);
+}
+
+.viewport-control {
+  padding: var(--space-3) var(--space-7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  box-shadow: var(--elevation-2);
+}
+
+.viewport-control:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.viewport-control:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* `#tree-message` is a top banner over the stage, shown only on a load failure. */

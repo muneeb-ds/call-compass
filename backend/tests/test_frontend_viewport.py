@@ -144,3 +144,113 @@ def test_frontend_viewport_module_has_no_hardcoded_node_ids() -> None:
 
     for node_id in config["nodes"]:
         assert node_id not in source
+
+
+# --- Manual pan/zoom maths (US-024's second half: panBox/zoomBox/zoomBounds) --------
+
+MANUAL_HARNESS = Path(__file__).resolve().parent / "viewport_manual_fixture.mjs"
+
+
+def run_pan(box: dict[str, float], dx: float, dy: float) -> dict[str, float]:
+    args = [str(box["x"]), str(box["y"]), str(box["width"]), str(box["height"]), str(dx), str(dy)]
+    result = subprocess.run(
+        ["node", str(MANUAL_HARNESS), "pan", *args], capture_output=True, check=True, text=True
+    )
+    parsed: dict[str, float] = json.loads(result.stdout)
+    return parsed
+
+
+def run_zoom(
+    box: dict[str, float], factor: float, anchor_x: float, anchor_y: float, whole: dict[str, float]
+) -> dict[str, Any]:
+    args = [
+        str(box["x"]),
+        str(box["y"]),
+        str(box["width"]),
+        str(box["height"]),
+        str(factor),
+        str(anchor_x),
+        str(anchor_y),
+        str(whole["width"]),
+        str(whole["height"]),
+    ]
+    result = subprocess.run(
+        ["node", str(MANUAL_HARNESS), "zoom", *args], capture_output=True, check=True, text=True
+    )
+    parsed: dict[str, Any] = json.loads(result.stdout)
+    return parsed
+
+
+def run_bounds(whole: dict[str, float]) -> dict[str, float]:
+    result = subprocess.run(
+        ["node", str(MANUAL_HARNESS), "bounds", str(whole["width"]), str(whole["height"])],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    parsed: dict[str, float] = json.loads(result.stdout)
+    return parsed
+
+
+@requires_node
+def test_pan_box_translates_without_changing_size() -> None:
+    box = {"x": 100.0, "y": 50.0, "width": 400.0, "height": 200.0}
+    panned = run_pan(box, 10.0, -5.0)
+
+    assert panned == {"x": 110.0, "y": 45.0, "width": 400.0, "height": 200.0}
+
+
+@requires_node
+def test_zoom_in_keeps_the_anchor_point_at_the_same_fraction_of_the_box() -> None:
+    """Zooming in around the box's own centre must leave the centre the centre."""
+    box = {"x": 0.0, "y": 0.0, "width": 400.0, "height": 200.0}
+    whole = {"width": 400.0, "height": 200.0}  # matches the box, so the clamp never bites
+    result = run_zoom(box, 2.0, 200.0, 100.0, whole)
+    zoomed = result["box"]
+
+    assert zoomed["width"] == pytest.approx(200.0)
+    assert zoomed["height"] == pytest.approx(100.0)
+    assert zoomed["x"] + zoomed["width"] / 2 == pytest.approx(200.0)
+    assert zoomed["y"] + zoomed["height"] / 2 == pytest.approx(100.0)
+
+
+@requires_node
+def test_zoom_in_can_be_clamped_to_the_minimum_width() -> None:
+    """A huge zoom-in factor must not shrink the box below `zoomBounds`' floor."""
+    box = {"x": 0.0, "y": 0.0, "width": 600.0, "height": 300.0}
+    whole = {"width": 600.0, "height": 300.0}
+    result = run_zoom(box, 1000.0, 300.0, 150.0, whole)
+
+    assert result["box"]["width"] == pytest.approx(result["bounds"]["minWidth"])
+    assert result["box"]["height"] == pytest.approx(result["bounds"]["minHeight"])
+
+
+@requires_node
+def test_zoom_out_cannot_exceed_the_whole_tree_fit() -> None:
+    """Zooming out past the point where the whole tree already fits is a no-op past that bound."""
+    box = {"x": 0.0, "y": 0.0, "width": 600.0, "height": 300.0}
+    whole = {"width": 800.0, "height": 400.0}
+    result = run_zoom(box, 0.01, 300.0, 150.0, whole)
+
+    assert result["box"]["width"] == pytest.approx(result["bounds"]["maxWidth"])
+    assert result["box"]["height"] == pytest.approx(result["bounds"]["maxHeight"])
+
+
+@requires_node
+def test_zoom_box_never_inverts_or_collapses_to_a_dot() -> None:
+    whole = {"width": 1000.0, "height": 500.0}
+    box = {"x": 0.0, "y": 0.0, "width": 1000.0, "height": 500.0}
+
+    for factor in (1e6, 1e-6):
+        result = run_zoom(box, factor, 500.0, 250.0, whole)
+        assert result["box"]["width"] > 0
+        assert result["box"]["height"] > 0
+
+
+@requires_node
+def test_zoom_bounds_scale_with_the_whole_tree_frame() -> None:
+    small = run_bounds({"width": 600.0, "height": 300.0})
+    large = run_bounds({"width": 1200.0, "height": 600.0})
+
+    assert large["maxWidth"] == pytest.approx(small["maxWidth"] * 2)
+    assert large["minWidth"] == pytest.approx(small["minWidth"] * 2)

@@ -154,7 +154,23 @@ it can be pinned from pytest this way** — that is the only test runner this di
   wired from `Analysis.onActivate(id)` (fired from `activate()` alongside the existing
   `data-state="active"` flip) in `app.js`'s `wireAnalysis`, reading the stage's live
   `getBoundingClientRect()` aspect ratio on every call so a window resize is picked up
-  for free on the next frontier move.
+  for free on the next frontier move — but through `viewport.autoGoTo(target)`, not
+  `goTo` directly: `autoGoTo` always records `target` as `lastAutoTarget` but only
+  animates there while `viewport.following` is true. `panBox(box, dx, dy)` and
+  `zoomBox(box, factor, anchorX, anchorY, bounds)` are the pure halves of manual pan/
+  zoom (node-tested via `viewport_manual_fixture.mjs`); `zoomBounds(wholeTreeFrame)`
+  derives the "neither inverted nor shrunk to a dot" clamp from the whole-tree frame
+  itself rather than a fixed pixel constant, so it scales with whatever tree is loaded.
+  `Viewport.enableManualControls({followButton, fitButton, doc})` is the DOM glue —
+  pointer drag-to-pan, wheel/pinch-to-zoom (two simultaneous pointers), and the +/-
+  keys (ignored while `isTextInputFocused`) — and is reviewed, not node-tested, same
+  split as `goTo`'s animation loop. Any manual pan/zoom/`fit()` calls
+  `disableFollow()`, which enables the Follow button (per this file's "disabled, never
+  hidden" rule, it is never `hidden`); `follow()` re-arms `following` and jumps back to
+  `lastAutoTarget` if a run is in flight. `Analysis.onReset` calls `viewport.follow()`
+  — and `reset()` runs at the top of every `run()`, not only from the Reset button —
+  which is what makes "auto-follow resumes on the next run or on reset" free without a
+  second code path.
 - `reset.js` — the Reset button. `resetAll({analysis, capture})` is the teardown and is
   pure wiring, so its **order** is assertable from node: cancel the in-flight stream
   *before* clearing, or a chunk already in flight repaints a node the tree just dimmed.

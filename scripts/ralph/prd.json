@@ -187,7 +187,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-024, second half. Depends on US-008's Viewport class. Keep the pan/zoom maths pure and exported where practical so the node harness can pin the clamping."
     },
     {

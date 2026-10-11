@@ -237,6 +237,11 @@ export function wireAnalysis(loading, hooks = {}) {
   };
   const svg = /** @type {SVGSVGElement} */ (document.getElementById("tree-canvas"));
   const viewport = new Viewport(svg);
+  viewport.enableManualControls({
+    followButton: /** @type {HTMLButtonElement} */ (document.getElementById("viewport-follow")),
+    fitButton: /** @type {HTMLButtonElement} */ (document.getElementById("viewport-fit")),
+    doc: document,
+  });
   const trace = new Trace(
     document.getElementById("trace-total"),
     document.getElementById("trace-list"),
@@ -267,20 +272,25 @@ export function wireAnalysis(loading, hooks = {}) {
   // The panel's open/closed state is a viewer preference, not run state, so neither
   // `onReset` nor `onTerminal` below ever touches `panel` — only the toggle does.
   analysis.onStep = (step, index) => rail.addStep(step, index);
-  // Follows the frontier down the tree as it moves. The stage's own aspect ratio,
-  // read fresh each time, is what keeps the framing correct across a window resize.
+  // Follows the frontier down the tree as it moves, as long as auto-follow is still
+  // armed — a manual pan/zoom/Fit (or clicking Follow to re-arm it) owns that flag,
+  // this hook only ever asks. The stage's own aspect ratio, read fresh each time, is
+  // what keeps the framing correct across a window resize.
   analysis.onActivate = (id) => {
     const layout = analysis.view && analysis.view.layout;
     if (!layout) return;
     const rect = svg.getBoundingClientRect();
     const aspect = rect.height > 0 ? rect.width / rect.height : 16 / 9;
-    viewport.goTo(frameFor(layout, id, aspect));
+    viewport.autoGoTo(frameFor(layout, id, aspect));
   };
   // The strip is drawn from the terminal event only, so an in-flight run never shows
-  // an outcome; `reset()` (a new run, or US-016's button) takes it away again.
+  // an outcome; `reset()` (a new run, or US-016's button) takes it away again. A new
+  // run re-arms auto-follow, too — `reset()` runs at the top of every `run()`, not
+  // only from the Reset button, which is what makes "resumes on the next run" free.
   analysis.onReset = () => {
     outcome.clear();
     rail.reset();
+    viewport.follow();
   };
   analysis.onTerminal = (frame) => {
     if (frame.event === "completed") outcome.completed(frame.data, analysis.picks);
@@ -295,7 +305,9 @@ export function wireAnalysis(loading, hooks = {}) {
     finished();
   };
   void loading.then((loaded) => {
-    if (loaded) analysis.view = loaded.view;
+    if (!loaded) return;
+    analysis.view = loaded.view;
+    viewport.setLayout(loaded.view.layout);
   });
 
   /** @param {{bytes: Uint8Array}} recording */
