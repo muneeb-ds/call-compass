@@ -85,12 +85,19 @@ class RecorderProcessor extends AudioWorkletProcessor {
     // `sampleRate` is the worklet global: the context's actual rate, which is not
     // necessarily the rate that was requested.
     this.resampler = createResampler(sampleRate, target);
+    this.paused = false;
+    // Pause/resume (US-026) travels over the port rather than tearing the processor
+    // down, so the MediaStream/AudioContext/worklet stay alive across a pause.
+    this.port.onmessage = (event) => {
+      if (event.data?.type === "paused") this.paused = event.data.value;
+    };
   }
 
   /** @param {Float32Array[][]} inputs */
   process(inputs) {
     const channels = inputs[0];
     if (!channels || channels.length === 0 || channels[0].length === 0) return true;
+    if (this.paused) return true;
     const resampled = this.resampler.push(downmix(channels));
     if (resampled.length > 0) {
       this.port.postMessage(resampled, [resampled.buffer]);

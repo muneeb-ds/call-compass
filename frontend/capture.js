@@ -73,6 +73,8 @@ export class Recorder {
     /** @type {Float32Array[]} */
     this.chunks = [];
     this.recording = false;
+    /** True while recording is held open but not collecting samples (US-026). */
+    this.paused = false;
   }
 
   /**
@@ -119,7 +121,31 @@ export class Recorder {
   }
 
   /**
+   * Holds the take open without collecting samples.
+   *
+   * The MediaStream, AudioContext, worklet and analyser all stay alive, so
+   * `resume()` needs no new permission prompt. No-op when not recording or
+   * already paused.
+   */
+  pause() {
+    if (!this.recording || this.paused) return;
+    this.paused = true;
+    this.node?.port.postMessage({ type: "paused", value: true });
+  }
+
+  /** Resumes collecting samples into the same take. No-op when not paused. */
+  resume() {
+    if (!this.recording || !this.paused) return;
+    this.paused = false;
+    this.node?.port.postMessage({ type: "paused", value: false });
+  }
+
+  /**
    * Stops the microphone and encodes everything captured.
+   *
+   * Samples from before and after any pause were pushed into the same `chunks`
+   * array in arrival order, so concatenating them splices the take back together
+   * with no gap inserted for the paused interval.
    *
    * @returns {Promise<Recording|null>} null if nothing was being recorded
    */
@@ -153,5 +179,6 @@ export class Recorder {
       await this.context.close();
       this.context = null;
     }
+    this.paused = false;
   }
 }

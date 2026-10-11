@@ -228,7 +228,7 @@
         "Tests pass"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-026, and the head of a strict chain: US-011 -> US-012 -> US-013 -> US-014. Pause the worklet, not the audio graph: disconnecting nodes or suspending the AudioContext risks dropped buffers at the boundary and a visible permission/indicator flicker. A `paused` flag inside the processor, set by port message, is the minimal change - the graph keeps running and the processor simply stops posting. The browser's recording indicator stays lit while paused, which is honest, since the mic is still open. No UI in this story."
     },
     {

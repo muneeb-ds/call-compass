@@ -33,10 +33,22 @@ it can be pinned from pytest this way** — that is the only test runner this di
   runs it as a **classic script**: it cannot `import` anything and must stay
   self-contained (hence the resampler living here, not in `wav.js`). Registered under the
   name `recorder`. Keep `createResampler` / `downmix` as top-level functions that touch no
-  worklet globals, so the node harness can load it with the globals stubbed.
+  worklet globals, so the node harness can load it with the globals stubbed. The
+  processor's `this.port.onmessage` (set in its constructor) accepts
+  `{type: "paused", value: boolean}` and flips an internal `paused` flag; `process()`
+  returns early (skipping the resampler entirely) while paused, so no chunk is posted
+  and no gap or extra silence is introduced at the splice when it resumes. This is the
+  one message type the port protocol carries inbound — the outbound direction is still
+  only the resampled `Float32Array` chunks.
 - `capture.js` — `Recorder` (start/stop/release) and `MicrophoneError`. `stop()` returns
   the encoded bytes **and** a Blob over the same bytes; use those bytes for both upload and
-  playback, never a separate MediaRecorder blob.
+  playback, never a separate MediaRecorder blob. `pause()`/`resume()` (US-026) hold the take
+  open without tearing anything down — the `MediaStream`/`AudioContext`/worklet/analyser
+  stay alive, so `resume()` needs no new permission prompt. Both are plain no-ops guarded by
+  `this.recording`/`this.paused`, safe to call twice. The pause signal travels over
+  `node.port.postMessage({type: "paused", value})` to the worklet rather than
+  disconnecting/suspending anything — see `recorder-worklet.js` below. `release()` (and
+  therefore `stop()`) always clears `paused`, so a later `start()` begins unpaused.
 - `timer.js` — the recording clock: pure `formatClock` / `formatElapsed`, the
   `MAX_RECORDING_MS` ceiling (derived from `wav.js`), and `RecordingTimer`, which owns both
   the display tick and the auto-stop. The ceiling is enforced by its own `setTimeout`, not
