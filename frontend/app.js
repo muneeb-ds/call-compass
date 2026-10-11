@@ -18,6 +18,16 @@ import { TreeView } from "./tree.js";
 import { frameFor, isTextInputFocused, Viewport } from "./viewport.js";
 import { Waveform } from "./waveform.js";
 
+/**
+ * How far auto-follow zooms in. Below 1 it frames more than the active node's parent
+ * and child rows, so the route stays in view around it and labels stay near their
+ * drawn size instead of being blown up to fill a tall centre column.
+ */
+const FOLLOW_ZOOM = 0.7;
+
+/** Where the trace panel starts open: wide enough for all three columns. */
+const TRACE_OPEN_QUERY = "(min-width: 1100px)";
+
 /** @param {string} text @param {"loading"|"ready"|"error"} state */
 function setStatus(text, state) {
   const el = document.getElementById("health-status");
@@ -312,6 +322,9 @@ export function wireAnalysis(loading, hooks = {}) {
     document.getElementById("trace-toggle"),
     { doc: document },
   );
+  // It starts open wherever the stage has room for a full trace column beside the
+  // tree; after that it is the viewer's to toggle, and nothing else touches it.
+  if (window.matchMedia && window.matchMedia(TRACE_OPEN_QUERY).matches) panel.open();
   const rail = new TraceRail(
     document.getElementById("trace-chip-list"),
     document.getElementById("trace-chip-total"),
@@ -341,7 +354,7 @@ export function wireAnalysis(loading, hooks = {}) {
     if (!layout) return;
     const rect = svg.getBoundingClientRect();
     const aspect = rect.height > 0 ? rect.width / rect.height : 16 / 9;
-    viewport.autoGoTo(frameFor(layout, id, aspect));
+    viewport.autoGoTo(frameFor(layout, id, aspect, FOLLOW_ZOOM));
     position.activate(id);
   };
   // The strip is drawn from the terminal event only, so an in-flight run never shows

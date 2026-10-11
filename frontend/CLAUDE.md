@@ -149,7 +149,7 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `activate()` itself, so it covers both the root-on-`started` and the
   `next_node_id`-on-`step` cases for free — `viewport.js`'s auto-follow is built on this
   rather than a second frontier tracker.
-- `trace-panel.js` — the collapsed trace rail and the slide-over panel it opens. `trace.js`'s
+- `trace-panel.js` — the collapsed trace rail and the panel it opens in the right-hand column. `trace.js`'s
   public API is frozen, so the **panel** is just `index.html` chrome around the exact
   `trace-total`/`trace-list` elements `Trace` already renders into — no module owns it.
   `TraceRail(listEl, totalEl, {onSelect})` is the sibling view: it accumulates its own
@@ -172,12 +172,12 @@ it can be pinned from pytest this way** — that is the only test runner this di
   different number from the Trace column's inference-only total, which is why it is
   labelled "end to end". `clear()` is the **absent** state (no children, no `data-state`
   at all — not an empty placeholder box) and is wired to `Analysis.onReset`. There are
-  **three** terminal looks — `completed` (green), `unplaced` (amber, with **no** leaf
+  **three** terminal looks — `completed` (mint, `--success`), `unplaced` (violet, `--warning`, with **no** leaf
   label at all), `errored` (red) — and they share one line shape; the accent comes from
   the container's `data-state`, so a new state is a CSS block plus a method, never new
-  markup. `.outcome-line` and its children truncate with `text-overflow: ellipsis`
-  rather than wrap, which is what keeps the strip to one line and the dock under its
-  ~15vh ceiling regardless of how long the breadcrumb or reason text gets.
+  markup. In the left-hand dock column `.outcome-line` wraps rather than truncating —
+  the label on its own line, then the breadcrumb, then the figures — so the whole
+  answer stays readable however long the breadcrumb or reason text gets.
   `STOP_REASONS` is keyed by the exact `StopReason` literals in
   `callcompass/traversal.py` and `test_frontend_outcome.py` pins the two sets equal, so
   **adding a backend stop reason fails here until the UI has a sentence for it**.
@@ -257,7 +257,10 @@ it can be pinned from pytest this way** — that is the only test runner this di
   no-op while disarmed. It is armed only by a **finished** run (terminal event, `error`
   event, or a rejected upload) and disarmed by its own press, which is what lets it
   stay live across a later run and cancel it.
-- `app.js` — page wiring only. Exports its entry points (`checkHealth`, `loadTree`,
+- `app.js` — page wiring only. Two layout constants live at its top: `FOLLOW_ZOOM`, the
+  `zoom` auto-follow passes to `frameFor` (below 1, so the route stays in view around the
+  active node), and `TRACE_OPEN_QUERY`, the media query under which the trace panel starts
+  open — after that the panel is the viewer's to toggle, as above. Exports its entry points (`checkHealth`, `loadTree`,
   `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
   re-deriving. `wireCapture({onRecording})` returns
   `{ recorder, waveform, timer, playback, toggle, reset, latest }`; `onRecording` is **awaited
@@ -299,7 +302,7 @@ the markup by hand produces a picture that is wrong in ways that read as app bug
   focus style. Tab order is DOM order (no `tabindex` anywhere); keep a new control's
   markup position equal to its visual position rather than reordering via CSS. Every
   animation introduced for v2 (the active-node pulse, the viewport's viewBox tween,
-  the trace panel slide, the dock's state-change transition) has a matching
+  the dock's state-change transition) has a matching
   `@media (prefers-reduced-motion: reduce)` override next to its definition — a new
   one needs the same pairing. The `active` tree-node state keeps a **static** halo
   (`filter: drop-shadow(...)`, not just the animated keyframe) specifically so it
