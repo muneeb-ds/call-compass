@@ -82,6 +82,50 @@ def test_readout_shows_elapsed_of_the_ceiling(timing: dict[str, Any]) -> None:
 
 
 @requires_node
+def test_readout_shows_a_paused_affordance(timing: dict[str, Any]) -> None:
+    assert timing["pausedReadout"] == "0:12 / 0:30 · paused"
+
+
+@requires_node
+def test_accumulated_elapsed_only_counts_unpaused_time(timing: dict[str, Any]) -> None:
+    """RecordingTimer.pause()/resume() (US-027) fold wall-clock marks into this."""
+    accumulated = timing["accumulated"]
+    # 5s already closed, a live span running from mark 20_000 to 23_000 adds 3s.
+    assert accumulated["running"] == 8000
+    # Two closed spans totalling 12s, now paused (startedAt == 0): frozen regardless
+    # of how much wall-clock time has passed since.
+    assert accumulated["pausedAfterTwoSpans"] == 12000
+    # A live span that would run past the ceiling is clamped, not allowed to overshoot.
+    assert accumulated["clampedToCeiling"] == MAX_SECONDS * 1000
+
+
+@requires_node
+def test_ceiling_is_rescheduled_against_the_remaining_budget(timing: dict[str, Any]) -> None:
+    """resume() times its auto-stop off this, not the full limit (US-027)."""
+    remaining = timing["remaining"]
+    assert remaining["midTake"] == MAX_SECONDS * 1000 - 12000
+    assert remaining["pastCeiling"] == 0
+
+
+@requires_node
+def test_segment_offsets_align_with_the_encoded_wav(timing: dict[str, Any]) -> None:
+    segments = timing["segments"]
+    # A single unpaused take yields exactly one segment spanning 0 to durationMs.
+    assert segments["singleUnpaused"] == [{"startMs": 0, "endMs": 30000}]
+    # Two record/resume spans of equal length, offsets into the stitched buffer.
+    assert segments["twoSegmentTake"] == [
+        {"startMs": 0, "endMs": 10000},
+        {"startMs": 10000, "endMs": 20000},
+    ]
+    # The second segment's raw end (500_000 samples) exceeds what clampSamples kept
+    # (480_000, the 30s ceiling), so it is clipped rather than reported past the take.
+    assert segments["clippedAtCeiling"] == [
+        {"startMs": 0, "endMs": 20000},
+        {"startMs": 20000, "endMs": 30000},
+    ]
+
+
+@requires_node
 @pytest.mark.parametrize("seconds", [1.0, MAX_SECONDS, MAX_SECONDS + 0.4, MAX_SECONDS + 5])
 def test_auto_stopped_recording_is_never_too_long_for_the_backend(seconds: float) -> None:
     """Wall-clock auto-stop can overshoot; the clamp keeps the upload valid anyway."""

@@ -34,10 +34,47 @@ export function formatClock(ms) {
  *
  * @param {number} ms
  * @param {number} [limitMs]
+ * @param {boolean} [paused] appends the `· paused` affordance (US-027)
  * @returns {string}
  */
-export function formatElapsed(ms, limitMs = MAX_RECORDING_MS) {
-  return `${formatClock(Math.min(ms, limitMs))} / ${formatClock(limitMs)}`;
+export function formatElapsed(ms, limitMs = MAX_RECORDING_MS, paused = false) {
+  const base = `${formatClock(Math.min(ms, limitMs))} / ${formatClock(limitMs)}`;
+  return paused ? `${base} · paused` : base;
+}
+
+/**
+ * Elapsed time across pauses, from wall-clock marks rather than a running total kept
+ * ticking by a timer - that is what lets this be pinned from node with synthetic
+ * timestamps instead of exercising real `setInterval` timing.
+ *
+ * An unpaused span contributes `now - startedAt`; a paused span (`startedAt === 0`)
+ * contributes nothing beyond what was already folded into `accumulatedMs` when it
+ * was closed.
+ *
+ * @param {number} accumulatedMs elapsed total from spans already closed
+ * @param {number} startedAt `performance.now()` mark when the current span began,
+ *   or `0` while paused or stopped
+ * @param {number} now a `performance.now()` reading
+ * @param {number} limitMs
+ * @returns {number}
+ */
+export function accumulatedElapsed(accumulatedMs, startedAt, now, limitMs) {
+  const live = startedAt ? accumulatedMs + (now - startedAt) : accumulatedMs;
+  return Math.min(Math.max(0, live), limitMs);
+}
+
+/**
+ * Milliseconds left before the ceiling, given whatever has already accumulated.
+ *
+ * `resume()` reschedules its auto-stop timeout against this rather than the full
+ * `limitMs`, so a paused take can neither exceed the limit nor auto-stop early.
+ *
+ * @param {number} elapsedMs
+ * @param {number} limitMs
+ * @returns {number}
+ */
+export function remainingMs(elapsedMs, limitMs) {
+  return Math.max(0, limitMs - elapsedMs);
 }
 
 /**
@@ -57,28 +94,64 @@ export class RecordingTimer {
     this.el = el;
     this.onLimit = onLimit;
     this.limitMs = limitMs;
+    /** `performance.now()` mark for the current unpaused span; `0` while paused/stopped. */
     this.startedAt = 0;
+    /** Elapsed total folded in from spans already closed by a `pause()` or `stop()`. */
+    this.accumulatedMs = 0;
+    this.paused = false;
     /** @type {ReturnType<typeof setInterval>|0} */
     this.interval = 0;
     /** @type {ReturnType<typeof setTimeout>|0} */
     this.timeout = 0;
   }
 
-  /** Elapsed milliseconds, frozen at the value reached when `stop()` was called. */
+  /** Elapsed milliseconds, frozen while paused and at the value reached when `stop()` was called. */
   get elapsedMs() {
-    return this.startedAt ? Math.min(performance.now() - this.startedAt, this.limitMs) : 0;
+    return accumulatedElapsed(this.accumulatedMs, this.startedAt, performance.now(), this.limitMs);
   }
 
   /** Starts counting from zero. */
   start() {
     this.clear();
+    this.accumulatedMs = 0;
+    this.paused = false;
     this.startedAt = performance.now();
     this.render(0);
-    this.interval = setInterval(() => this.render(performance.now() - this.startedAt), TICK_MS);
+    this.interval = setInterval(() => this.render(this.elapsedMs), TICK_MS);
+    this.scheduleCeiling(this.limitMs);
+  }
+
+  /**
+   * Freezes the readout and drops the ceiling timeout. No-op when not running or
+   * already paused.
+   */
+  pause() {
+    if (!this.startedAt || this.paused) return;
+    this.accumulatedMs = this.elapsedMs;
+    this.startedAt = 0;
+    this.paused = true;
+    this.clear();
+    this.render(this.accumulatedMs);
+  }
+
+  /**
+   * Resumes counting, rescheduling the ceiling timeout against whatever budget is
+   * left rather than the full `limitMs`. No-op when not paused.
+   */
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.startedAt = performance.now();
+    this.interval = setInterval(() => this.render(this.elapsedMs), TICK_MS);
+    this.scheduleCeiling(remainingMs(this.accumulatedMs, this.limitMs));
+  }
+
+  /** @param {number} remaining */
+  scheduleCeiling(remaining) {
     this.timeout = setTimeout(() => {
       this.render(this.limitMs);
       this.onLimit();
-    }, this.limitMs);
+    }, remaining);
   }
 
   /** Stops counting, leaving the final time on screen for the operator to read. */
@@ -86,6 +159,8 @@ export class RecordingTimer {
     const elapsed = this.elapsedMs;
     this.clear();
     this.startedAt = 0;
+    this.accumulatedMs = 0;
+    this.paused = false;
     this.render(elapsed);
   }
 
@@ -93,6 +168,8 @@ export class RecordingTimer {
   reset() {
     this.clear();
     this.startedAt = 0;
+    this.accumulatedMs = 0;
+    this.paused = false;
     this.render(0);
   }
 
@@ -106,6 +183,6 @@ export class RecordingTimer {
 
   /** @param {number} ms */
   render(ms) {
-    this.el.textContent = formatElapsed(ms, this.limitMs);
+    this.el.textContent = formatElapsed(ms, this.limitMs, this.paused);
   }
 }

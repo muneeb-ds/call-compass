@@ -50,7 +50,38 @@ function describe(err) {
  * @property {Blob} blob the same bytes, for playback
  * @property {number} durationMs
  * @property {number} sampleRate always 16000
+ * @property {Array<{startMs: number, endMs: number}>} segments one entry per
+ *   record/resume span (US-027); a single unpaused take has exactly one, spanning
+ *   `0` to `durationMs`
  */
+
+/**
+ * Converts sample-accumulated segment bounds into millisecond offsets into the
+ * final stitched buffer, clipped to whatever survived `clampSamples` trimming the
+ * tail at the recording ceiling.
+ *
+ * Bounds are derived from posted sample counts, never from wall-clock marks, so a
+ * segment boundary lands exactly on the real splice in the encoded WAV rather than
+ * drifting against the resampled buffer.
+ *
+ * @param {Array<{startSample: number, endSample: number}>} rawSegments
+ * @param {number} keptSamples sample count of the buffer actually encoded
+ * @param {number} sampleRate
+ * @returns {Array<{startMs: number, endMs: number}>}
+ */
+export function deriveSegments(rawSegments, keptSamples, sampleRate) {
+  const segments = [];
+  for (const { startSample, endSample } of rawSegments) {
+    const start = Math.min(startSample, keptSamples);
+    const end = Math.min(endSample, keptSamples);
+    if (end <= start) continue;
+    segments.push({
+      startMs: Math.round((start / sampleRate) * 1000),
+      endMs: Math.round((end / sampleRate) * 1000),
+    });
+  }
+  return segments;
+}
 
 /**
  * Records one utterance at a time.
@@ -75,6 +106,12 @@ export class Recorder {
     this.recording = false;
     /** True while recording is held open but not collecting samples (US-026). */
     this.paused = false;
+    /** Total samples posted by the worklet so far this take (US-027). */
+    this.sampleCount = 0;
+    /** Sample offset where the currently-open segment began. */
+    this.segmentStart = 0;
+    /** @type {Array<{startSample: number, endSample: number}>} segments closed by a pause or stop */
+    this.rawSegments = [];
   }
 
   /**
@@ -91,6 +128,9 @@ export class Recorder {
     }
 
     this.chunks = [];
+    this.sampleCount = 0;
+    this.segmentStart = 0;
+    this.rawSegments = [];
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
@@ -109,7 +149,9 @@ export class Recorder {
         processorOptions: { targetSampleRate: SAMPLE_RATE },
       });
       this.node.port.onmessage = (event) => {
-        this.chunks.push(new Float32Array(event.data));
+        const chunk = new Float32Array(event.data);
+        this.chunks.push(chunk);
+        this.sampleCount += chunk.length;
       };
       source.connect(this.analyser);
       this.analyser.connect(this.node);
@@ -130,6 +172,7 @@ export class Recorder {
   pause() {
     if (!this.recording || this.paused) return;
     this.paused = true;
+    this.rawSegments.push({ startSample: this.segmentStart, endSample: this.sampleCount });
     this.node?.port.postMessage({ type: "paused", value: true });
   }
 
@@ -137,6 +180,7 @@ export class Recorder {
   resume() {
     if (!this.recording || !this.paused) return;
     this.paused = false;
+    this.segmentStart = this.sampleCount;
     this.node?.port.postMessage({ type: "paused", value: false });
   }
 
@@ -152,6 +196,11 @@ export class Recorder {
   async stop() {
     if (!this.recording) return null;
     this.recording = false;
+    // Paused already closed the open segment at the point it stopped collecting;
+    // closing it again here would double-count the paused interval as recorded time.
+    if (!this.paused) {
+      this.rawSegments.push({ startSample: this.segmentStart, endSample: this.sampleCount });
+    }
     await this.release();
 
     const samples = clampSamples(concatChunks(this.chunks));
@@ -161,6 +210,7 @@ export class Recorder {
       blob: new Blob([bytes], { type: "audio/wav" }),
       durationMs: Math.round((samples.length / SAMPLE_RATE) * 1000),
       sampleRate: SAMPLE_RATE,
+      segments: deriveSegments(this.rawSegments, samples.length, SAMPLE_RATE),
     };
   }
 

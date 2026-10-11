@@ -250,7 +250,7 @@
         "Tests pass"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-027. Depends on US-011. Wall-clock offsets drift against the resampled buffer, and a marker that does not sit on the real splice is worse than no marker - accumulate posted sample counts instead. MAX_SECONDS already comes from wav.js so the ceiling is not written out twice; keep it that way."
     },
     {

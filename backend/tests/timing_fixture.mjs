@@ -16,7 +16,9 @@ const frontend = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "fron
 const load = (name) => import(pathToFileURL(join(frontend, name)).href);
 
 const { MAX_SECONDS, SAMPLE_RATE, clampSamples, encodeWav } = await load("wav.js");
-const { MAX_RECORDING_MS, formatClock, formatElapsed } = await load("timer.js");
+const { MAX_RECORDING_MS, accumulatedElapsed, formatClock, formatElapsed, remainingMs } =
+  await load("timer.js");
+const { deriveSegments } = await load("capture.js");
 
 const seconds = process.argv[2] === undefined ? null : Number(process.argv[2]);
 
@@ -30,6 +32,41 @@ if (seconds === null) {
       elapsed: Object.fromEntries(cases.map((ms) => [ms, formatElapsed(ms)])),
       // The display must never read past its own ceiling, even if the stop lands late.
       overrun: formatElapsed(MAX_RECORDING_MS + 400),
+      pausedReadout: formatElapsed(12_000, MAX_RECORDING_MS, true),
+      // Two pauses: a 5s span, a pause, a 7s span, a second pause, both folded into
+      // `accumulatedMs` the way RecordingTimer.pause() does - only wall-clock marks go in.
+      accumulated: {
+        running: accumulatedElapsed(5000, 20_000, 23_000, MAX_RECORDING_MS),
+        pausedAfterTwoSpans: accumulatedElapsed(12_000, 0, 999_999, MAX_RECORDING_MS),
+        clampedToCeiling: accumulatedElapsed(25_000, 1000, 10_000, MAX_RECORDING_MS),
+      },
+      remaining: {
+        midTake: remainingMs(12_000, MAX_RECORDING_MS),
+        pastCeiling: remainingMs(35_000, MAX_RECORDING_MS),
+      },
+      segments: {
+        singleUnpaused: deriveSegments(
+          [{ startSample: 0, endSample: 480_000 }],
+          480_000,
+          SAMPLE_RATE,
+        ),
+        twoSegmentTake: deriveSegments(
+          [
+            { startSample: 0, endSample: 160_000 },
+            { startSample: 160_000, endSample: 320_000 },
+          ],
+          320_000,
+          SAMPLE_RATE,
+        ),
+        clippedAtCeiling: deriveSegments(
+          [
+            { startSample: 0, endSample: 320_000 },
+            { startSample: 320_000, endSample: 500_000 },
+          ],
+          480_000,
+          SAMPLE_RATE,
+        ),
+      },
     }),
   );
 } else {

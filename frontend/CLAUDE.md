@@ -49,10 +49,29 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `node.port.postMessage({type: "paused", value})` to the worklet rather than
   disconnecting/suspending anything — see `recorder-worklet.js` below. `release()` (and
   therefore `stop()`) always clears `paused`, so a later `start()` begins unpaused.
-- `timer.js` — the recording clock: pure `formatClock` / `formatElapsed`, the
+  `Recorder` also tracks `sampleCount`/`segmentStart`/`rawSegments` (US-027): every message
+  from the worklet adds to `sampleCount`, and `pause()`/`stop()` close the currently-open
+  segment at that running count (`resume()` opens the next one the same way) — **never** at
+  a `performance.now()` mark, because a segment boundary has to land on the real splice in
+  the encoded WAV, and only sample counts stay aligned with it. `stop()` converts those raw
+  sample bounds to the `Recording.segments` the rest of the app sees via the pure, exported
+  `deriveSegments(rawSegments, keptSamples, sampleRate)`, which also clips any bound past
+  `keptSamples` — the sample count `clampSamples` actually kept after trimming the tail at
+  the 30s ceiling.
+- `timer.js` — the recording clock: pure `formatClock` / `formatElapsed` (now takes a
+  `paused` flag that appends `· paused`) / `accumulatedElapsed` / `remainingMs`, the
   `MAX_RECORDING_MS` ceiling (derived from `wav.js`), and `RecordingTimer`, which owns both
   the display tick and the auto-stop. The ceiling is enforced by its own `setTimeout`, not
   by the tick, so the stop lands on the limit rather than up to a tick late.
+  `RecordingTimer.pause()`/`resume()` (US-027) freeze/resume `elapsedMs`: `startedAt` is the
+  `performance.now()` mark for the span currently running (`0` while paused/stopped) and
+  `accumulatedMs` is the total already folded in from closed spans — `elapsedMs` is just
+  `accumulatedElapsed(accumulatedMs, startedAt, performance.now(), limitMs)`, which is why
+  that function is pure and exported: it is the one place "time across a pause" is computed,
+  and it is what node pins instead of exercising real `setInterval`/`performance.now()`
+  timing. `resume()` reschedules the ceiling `setTimeout` via `remainingMs(accumulatedMs,
+  limitMs)` rather than the full `limitMs`, so a paused take can neither exceed the limit
+  nor auto-stop early.
 - `waveform.js` — `Waveform(canvas)`: `start(analyser)` runs a `requestAnimationFrame` loop
   over `getByteTimeDomainData`, `stop()` leaves a flat gray baseline. Cosmetic only; it
   never reads or alters the captured samples. The canvas is sized by CSS and its backing
