@@ -325,7 +325,7 @@
         "Verify in browser using dev-browser skill at 1440px, 1024px and 768px widths, in both themes"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-031, first half. Split from the motion/a11y pass so one iteration is not chasing both layout and focus behaviour. CSS-only wherever possible."
     },
     {

@@ -128,12 +128,19 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: var(--text-base);
   line-height: 1.5;
+  /* Nothing in the shell is meant to widen the document - the tree stage pans
+   * internally instead of the page scrolling. This is a safety net, not a fix for a
+   * known overflow. */
+  overflow-x: hidden;
 }
 
 /* Thin single-row status bar: health dot + a mono readout app.js fills with
- * `tree_id · node_count nodes · model N ms` (see checkHealth()). */
+ * `tree_id · node_count nodes · model N ms` (see checkHealth()). `flex-wrap: nowrap`
+ * is explicit (it's the flex default, but this row must never become two rows at any
+ * width) - narrow viewports are handled by letting the text children truncate instead. */
 .statusbar {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-6);
   padding: var(--space-5) var(--space-8);
@@ -161,6 +168,11 @@ body {
 
 .statusbar-text {
   margin: 0;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: var(--text-xs);
   color: var(--text-dim);
 }
@@ -178,6 +190,8 @@ body {
  * `PositionReadout`, which owns the text — this rule is look only. */
 .statusbar-position {
   margin: 0 0 0 auto;
+  min-width: 0;
+  flex: 0 1 auto;
   font-size: var(--text-xs);
   color: var(--text-dim);
   white-space: nowrap;
@@ -888,4 +902,42 @@ body {
 .message[data-state="info"] {
   color: var(--text-dim);
   font-family: var(--mono);
+}
+
+/* Narrow breakpoint (<900px, phone/small-tablet widths): the floating centred dock
+ * becomes a full-width bottom bar, and the slide-over trace panel covers the whole
+ * stage instead of a corner of it, since there is no room to float either chrome
+ * element over the tree without obscuring most of it. The >=900px look (both are
+ * still the >=1280px "centred floating bar" / "corner slide-over" look - nothing
+ * distinguishes 900-1279px further) is the file's existing default, unchanged above
+ * this breakpoint. `.trace-panel`'s existing `transform: translateX(...)` slide is
+ * untouched - it is expressed as a percentage of the panel's own width, so it keeps
+ * working once that width becomes 100% here. */
+@media (max-width: 899px) {
+  .dock {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    justify-content: center;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .trace-panel {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    border-radius: 0;
+  }
+
+  /* The dock now spans the full width at its bottom edge, so the Follow/Fit controls
+   * (also bottom-left) need to clear it rather than sit underneath it. The dock's own
+   * `max-height: 15vh` ceiling is the worst case to clear against. */
+  .viewport-controls {
+    bottom: calc(15vh + var(--space-8));
+  }
 }
