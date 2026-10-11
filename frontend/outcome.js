@@ -63,7 +63,7 @@ export const STOP_REASONS = {
   none_of_these: "the model heard none of these options in the recording",
   empty_response: "the model returned no answer for this question",
   unknown_tool: "the model named an option this question does not offer",
-  depth_limit: "the traversal hit its step limit before reaching a recommendation",
+  depth_limit: "the traversal hit its step limit before reaching an outcome",
 };
 
 /**

@@ -362,7 +362,7 @@
         "Tests pass"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-032. Last by necessity - it documents everything above. The grep criterion is the PRD's own success metric for the honesty goal, so run it verbatim and fix any hit rather than rewording the criterion."
     }
   ]

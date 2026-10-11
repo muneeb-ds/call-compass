@@ -92,7 +92,8 @@ class LeafNode(_NodeBase):
 
     It carries a `label` and nothing else. A leaf is deliberately *not* a place to
     put advice for the operator to read out — `extra="forbid"` on `_Strict` means a
-    config still declaring `recommendation` or `rationale` is a startup error.
+    config still declaring either of the two fields removed from this schema in v2
+    is a startup error.
     """
 
     type: Literal["leaf"]

@@ -259,7 +259,7 @@ export class TreeView {
     group.dataset.nodeId = node.id;
     group.dataset.kind = node.leaf ? "leaf" : "branch";
     // Leaves get a pill shape against the branches' soft rectangles, so the
-    // recommendations read as a different kind of thing from across the room.
+    // outcomes read as a different kind of thing from across the room.
     group.append(
       this.create("rect", {
         class: "tree-box",

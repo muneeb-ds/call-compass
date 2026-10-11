@@ -672,7 +672,7 @@ body {
   transition: fill 120ms ease-out, stroke 120ms ease-out, stroke-width 120ms ease-out;
 }
 
-/* Leaves are pills in the recommendation accent, so they read as a different kind of
+/* Leaves are pills in the outcome accent, so they read as a different kind of
  * thing from the branch nodes above them. */
 .tree-node[data-kind="leaf"] .tree-box {
   fill: var(--success-fill);

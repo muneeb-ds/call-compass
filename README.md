@@ -1,13 +1,15 @@
 # CallCompass
 
 A demo app showing how **NeuDecide** — a 43 MB on-device speech-to-tool-call model (ONNX, CPU)
-— guides a sales agent through a decision tree from a single recorded customer utterance. There
-is no transcription step: raw audio maps directly to a structured tool call, once per tree node.
+— walks a decision tree from a single recorded customer utterance. There is no transcription
+step: raw audio maps directly to a structured tool call, once per tree node.
 
 Press record, say one sentence as the customer, and watch the tree light up node by node with the
-real per-inference latency, ending in a recommendation the agent can read out loud.
+real per-inference latency, ending in a leaf that names the classification the model reached —
+never advice.
 
-> Full product requirements live in [`tasks/prd-callcompass-mvp.md`](tasks/prd-callcompass-mvp.md).
+> Full product requirements live in [`tasks/prd-callcompass-v2.md`](tasks/prd-callcompass-v2.md)
+> (and the original [`tasks/prd-callcompass-mvp.md`](tasks/prd-callcompass-mvp.md) it builds on).
 
 ## What this is, and what it is not
 
@@ -16,14 +18,18 @@ and plumbing demonstration for on-device speech-to-tool-call, not as a product.
 
 Explicit non-goals — none of these are implemented, and none are stubbed out to look implemented:
 
-- **No live multi-turn calls.** One recorded utterance per run. There is no conversation state,
-  no barge-in, and no streaming during the utterance.
+- **No live multi-turn calls.** One recorded utterance per run (pausable, but still one take).
+  There is no conversation state, no barge-in, and no streaming during the utterance.
 - **No CRM or telephony integration.** Nothing is read from or written to any external system.
 - **English only.** No other language has been tested.
 - **No speaker demographics or sentiment scoring.** The model emits a tool call and an enum
   value; it is not inferring anything about who is speaking.
-- **Not a recommendation engine.** The advice comes from strings an operator wrote in
-  `config/tree.json`. The model only chooses which branch to take.
+- **Not a recommendation engine, by construction.** A leaf in `config/tree.json` carries a
+  `label` and nothing else — the schema has no field for advice text. Every model in
+  `backend/callcompass/tree.py` is strict (`extra="forbid"`), so a config that tries to add a
+  `recommendation` or `rationale` back in fails at server startup rather than silently working.
+  The model only ever chooses which branch to take; the leaf it lands on is a classification, not
+  a script to read to the customer.
 
 ## Layout
 
@@ -34,6 +40,11 @@ frontend/              static vanilla HTML/CSS/JS, no build step
 config/tree.json       the decision tree — the whole sales flow
 scripts/bench_latency.py   the latency measurement behind the figures below
 ```
+
+The UI itself is a thin status bar, a full-bleed tree stage you watch the model move through, a
+floating capture dock (record, pause/resume, timer, waveform, playback, reset) overlaid on the
+stage, and a collapsible trace panel for per-step detail. There is no separate "result card" —
+a finished run's outcome shows as a single-line strip in the dock.
 
 ## Requirements
 
@@ -97,8 +108,7 @@ Use `http://127.0.0.1:8000`, not a LAN IP: `getUserMedia` requires a secure cont
 
 ## Demo script
 
-Record yourself as the **customer**, one sentence, then stop. Each utterance below was verified
-end to end against the real model on this repo's `config/tree.json`.
+Record yourself as the **customer**, one sentence, then stop.
 
 The tree branches six ways at the root and runs up to **four** inferences deep, so different
 utterances take visibly different routes — that is the point of the shape. A route is only as
@@ -110,94 +120,96 @@ the examples below do.
 Every node asks another question of the *same* one sentence, so the deepest routes need the
 most densely loaded utterances. That is the real ceiling on tree depth here — not latency.
 
-| Say this | Route | Inferences | Lands on |
+| Say this | Intended route | Inferences | Typically lands on |
 | --- | --- | --- | --- |
-| "What does the Pro tier cost per seat? We're a scaling team, but there's no budget this quarter." | pricing → plan cost → Pro → budget | 4 | **Budget objection** |
-| "What's the price per seat? We're a large org and we'll need a security review and SSO first." | pricing → plan cost → Enterprise → security | 4 | **Security review required** |
-| "Does it do dashboards for my scaling team? We're interested, but we're mid-project right now." | feature → dashboards → Pro → timing | 4 | **Timing objection** |
-| "Can you do anything on the price? I'd need my finance team to sign off anyway." | pricing → discount → approval | 3 | **Approval needed** |
-| "How does invoicing work — can we pay annually instead of monthly?" | pricing → billing terms | 2 | **Billing terms question** |
-| "We already use Looker for all of this and it works fine." | competitor → incumbent | 2 | **Incumbent in place** |
-| "We've been paying all year and barely anyone on my team logs in. I'm not sure we'll renew." | existing account → renewal risk | 2 | **Renewal at risk** |
-| "This looks great — how do I get a trial going with my own data?" | buying signal → trial | 2 | **Trial requested** |
-| "Do you handle payroll and benefits?" | feature → unsupported | 2 | **Capability gap** |
+| "What does the Pro tier cost per seat? We're a scaling team, but there's no budget this quarter." | pricing → plan cost → budget | 3–4 | **Budget objection** or **Timing objection** |
+| "Does it do dashboards for my scaling team? We're interested, but we're mid-project right now." | feature → dashboards → timing | 4 | **Timing objection** |
+| "How much is the Pro plan? My team is growing and we're evaluating you against Looker." | competitor mention → posture | 4 | **Incumbent in place** |
+| "Do you have integrations for my growing team? I'm ready to buy, how do we start a trial?" | buying signal → close path | 2 | **Proposal requested** or **Trial requested** |
 | "I'm really not interested, please don't call here again." | not interested | 1 | **Not interested** |
+| "It's been raining all week and my dog won't go outside." | — | 1–2 | **Couldn't place this** |
 
-That covers all six level-1 branches (`pricing_question`, `feature_question`,
-`competitor_mention`, `existing_account`, `buying_signal`, `not_interested`) and routes of every
-available length, 1 through 4.
+That covers five of the six level-1 branches (`pricing_question`, `feature_question`,
+`competitor_mention`, `buying_signal`, `not_interested` — `existing_account` is the sixth,
+reached by e.g. "we've been paying all year and barely anyone on my team logs in"), plus the
+honest-failure case.
 
-> **These utterances have not yet been re-verified against the real model.** The tree was
-> widened from 8 nodes to 26 after the figures below were taken; the routes above are what the
-> *config* dictates, not what a run was observed to do. Re-run them before demoing, and expect
-> the four-inference routes to be the fragile ones — they ask four questions of one sentence.
+> **"Typically lands on" is not a promise.** These six utterances, their intended routes, and the
+> measured latencies below were all captured together in one `scripts/bench_latency.py` run
+> against the real model on this repo's current `config/tree.json` (`northbeam-saas-v2`, 26
+> nodes). The model's branch choice is genuinely probabilistic — the same "budget" utterance
+> landed on **Timing objection** every time in that run rather than the intended **Budget
+> objection** — because only tool *names*, not argument values, are grammar-constrained (see
+> [Things worth knowing](#things-worth-knowing)). Demo the *mechanism* (watch the tree move,
+> read the position readout, trust the latency), not a specific leaf as guaranteed output.
+> Rehearse your own delivery before presenting — voice and phrasing shift the outcome, and a
+> line that lands cleanly for one speaker may not for another.
 
-### The honest-failure utterance
+### Pause and resume
 
-```
-"It's been raining all week and my dog won't go outside."
-```
+Press Record, say the first half of the utterance, press **Pause** (or hit `P`) — the dock takes
+on a visibly held treatment, the waveform freezes instead of going flat, and the browser's
+recording indicator stays lit because the microphone is still open. Collect your thought, press
+**Resume** (or `P` again), finish the sentence, then **Stop**. The two spans are stitched into one
+buffer with no gap or inserted silence; after stopping, the static waveform shows the full take
+with a marker at the exact sample offset where the splice happened, so you can confirm nothing
+was lost before sending it. `Space` toggles record/stop and `P` toggles pause from anywhere
+outside a text field.
 
-Nothing in the tree applies, so the model declines at the root and the UI shows the amber
-**"Couldn't place this"** card naming the node it stopped on and why. Worth showing on purpose:
-the demo is more credible for having a visible decline state than for pretending every utterance
-maps somewhere.
+### Watching the position readout
+
+While a run is in flight, the status bar shows the active node's label, `Depth D of T`, and
+`inference N` — updated the instant each inference returns, in sync with the node that lights up
+on the tree. It is the plain-language version of what the highlighted node is already showing, so
+narrate from it rather than reading node ids off the graph: "we're at depth 2 of 5, on the pricing
+question, three inferences in."
 
 ### Operator notes
 
-- **Press Reset between runs.** It clears the recording, the highlighting, the trace and the
-  result card without a page reload, so the tree is never re-fetched.
+- **Press Reset between runs.** It clears the recording, the tree highlighting, the trace, the
+  outcome strip, the static waveform, and the camera position without a page reload, so the tree
+  is never re-fetched.
 - **Play back the recording after a surprising result.** The playback control serves the exact
   bytes that were uploaded, so it is how you tell "the model was wrong" apart from "the mic
   caught half a sentence".
-- Speak at a normal pace and finish the sentence. Recording auto-stops at 30 s.
-- Results vary with voice and phrasing — the same sentence read by two different speakers can
-  take different branches. Rehearse your own delivery of the lines above before presenting; do
-  not assume a line that worked for someone else will work for you.
+- Speak at a normal pace and finish the sentence. Recording auto-stops at 30 s of accumulated
+  (unpaused) time.
+- Results vary with voice and phrasing — the same sentence read by two different speakers, or run
+  twice, can take different branches. That is expected model behaviour, not a bug; see the caveat
+  above the demo table.
 - The declared `enum` is **advisory**. NeuDecide grammar-constrains parameter *names*, not
-  values, so an argument value outside the configured list shows up occasionally. The branch is
-  chosen by tool name alone, so traversal continues and the odd value is logged — it is trace
-  detail, not a failure.
+  values, so an argument value outside the configured list shows up occasionally (the bench run
+  above hit this on about half its runs). The branch is chosen by tool name alone, so traversal
+  continues and the odd value is logged — it is trace detail, not a failure.
 
 ## Measured latency
 
-20 consecutive runs of the demo-script utterances above, against the real model, on an
-**Apple M3 Pro (11 cores), macOS 27.0.1, Python 3.11.13, neudecide 0.1.0, onnxruntime 1.31.0**,
-`q4` variant, CPU execution provider:
+20 consecutive runs of the demo-script utterances above, against the real model, on the current
+`northbeam-saas-v2` tree (26 nodes, routes 1–4 inferences deep), on an **Apple M3 Pro (ARM64,
+11 cores), macOS 27.0.1, Python 3.11.13, neudecide 0.1.0, onnxruntime 1.31.0**, `q4` variant, CPU
+execution provider:
 
 | | median | p95 | min | max |
 | --- | --- | --- | --- | --- |
-| Total inference (sum of `generate()` calls) | **240 ms** | **258 ms** | 50 ms | 258 ms |
-| Total latency (server end to end, what the result card shows) | **242 ms** | **263 ms** | 50 ms | 263 ms |
-| Client wall clock around the HTTP request | 242 ms | 266 ms | 51 ms | 266 ms |
+| Total inference (sum of `generate()` calls) | **333 ms** | **612 ms** | 129 ms | 612 ms |
+| Total latency (server end to end, what the outcome strip shows) | **334 ms** | **613 ms** | 130 ms | 613 ms |
+| Client wall clock around the HTTP request | 335 ms | 614 ms | 131 ms | 614 ms |
 
-Comfortably inside the PRD's one-second budget, with ~4x headroom. Model load time is excluded
-by design — it happens once at startup, not per request.
+Comfortably inside the PRD's one-second budget — the worst single run (613 ms, a 4-inference
+route) still leaves headroom. Model load time is excluded by design: it happens once at startup
+(4.6 s in this run), not per request.
 
-The spread is dominated by **how many inferences a path needs**, not by jitter. Over 80 runs
-(four 20-run repeats):
+The spread is dominated by **how many inferences a path needs**, not by jitter:
 
-- a 3-inference path to a deep leaf: median **276 ms**
-- the level-2 short circuit (`not_interested`) and a root-level decline, 1 inference each:
-  median **67 ms** (range 50–100 ms)
+- the 1-inference level-2 short circuit (`not_interested`): **~130–160 ms**
+- the 2-inference off-topic decline (`unplaced`): **~200–250 ms**
+- the 2-inference buying-signal route: **~325–465 ms**
+- the 3–4-inference pricing/feature/competitor routes: **~300–615 ms**, and the single slowest
+  run in the set (613 ms) is one of these
 
-**These figures predate the wider tree** (`northbeam-saas-v1`, 8 nodes, 3 inferences at most).
-The deepest route in `northbeam-saas-v2` is **4** inferences, so on the same hardware expect
-roughly one more ~80 ms call on the longest routes — ~320–360 ms, still comfortably inside the
-one-second budget. Nothing about per-call cost changed; only the number of calls did. Re-run
-`scripts/bench_latency.py` to replace this paragraph with measured numbers.
-
-**Caveat on the p95, worth reading before quoting it.** The measurement machine was a normal
-laptop with other applications running (load average ~4–6, one background process holding a
-core), not a quiesced benchmark host. Across the four repeats the median was stable at
-**241–286 ms** but p95 ranged **263–477 ms**, because p95 over only 20 samples *is* the
-second-slowest run and so moves with one outlier. The table above is the quietest of the four;
-pooled across all 80 runs the figures are median **245 ms**, p95 **353 ms**. Treat
-"comfortably under a second on laptop CPU" as the claim that is actually supported here, and
-re-measure on your own machine rather than inheriting these numbers.
-
-All 80 runs resolved as intended — every demo-script utterance reached its listed leaf and only
-the off-topic utterance came back `unplaced`.
+All 20 runs resolved as intended by *outcome* — every scripted utterance reached a leaf
+(`completed`) except the off-topic one, which came back `unplaced` as designed. As the demo
+script's caveat above says, *which* leaf a given utterance reaches is not guaranteed run to run.
 
 Reproduce it:
 
@@ -250,10 +262,8 @@ coordinates to update.
     "out_value_reframe": {
       "id": "out_value_reframe",
       "type": "leaf",
-      "label": "Budget objection",      // the outcome, as a classification
-      "level": 5,
-      "recommendation": "Move from price to cost of delay, and ...",  // required
-      "rationale": "Optional smaller text under the recommendation."  // optional
+      "label": "Budget objection",      // the outcome, as a classification — nothing else
+      "level": 5
     }
   }
 }
@@ -263,17 +273,24 @@ The `description` fields are **not decoration** — they are what the model sees
 descriptions, and they are the main lever on branch accuracy. Write them as a description of what
 the customer said, not as an instruction to the model.
 
+A leaf is deliberately **not** a place to put advice for an operator to read out: it carries
+`label` (plus the shared `level` and optional `prompt_hint`) and nothing else. There is no
+`recommendation` or `rationale` field in the schema at all.
+
 ### Constraints the loader enforces
 
 An invalid config **fails server startup** with a single-line error naming the offending node id,
 rather than misbehaving at inference time. Rejected:
 
 - An unknown field anywhere (every object is strict, so a typo'd key is an error, not a no-op).
+  **This is what rejects a `recommendation` or `rationale` key on a leaf** — those fields do not
+  exist in the schema, so supplying either is a startup error like any other unknown key, not a
+  silently-ignored no-op.
 - A node whose `id` does not equal its key in `nodes`.
 - A duplicate node id in the JSON text — caught even though `json.loads` would silently dedupe it.
 - A `root` that is not a key in `nodes`.
 - An option whose `next` points at a missing node id.
-- A branch node with zero `options`; a leaf without `recommendation`.
+- A branch node with zero `options`.
 - A duplicate `tool_name` within one node.
 - An `argument` with a missing or empty `enum`. Arguments are enum-only by construction.
 - A `tool_name` of `none_of_these` — the backend injects that tool into every node's tool list so
@@ -316,13 +333,16 @@ confidently wrong model output rather than an error.
 
 ## Quality checks
 
-All three must pass before any commit. Run from `backend/`:
+All four must pass before any commit. The first three run from `backend/`; the fourth from the
+repo root:
 
 ```bash
 cd backend
 ../.venv/bin/ruff check .        # lint + import sort
 ../.venv/bin/mypy callcompass    # typecheck (strict)
 ../.venv/bin/pytest              # tests
+cd ..
+node --check frontend/*.js       # frontend syntax
 ```
 
 The suite needs **no model and no network** — it injects a scripted fake. The frontend has no
