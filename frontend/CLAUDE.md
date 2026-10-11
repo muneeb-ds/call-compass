@@ -89,7 +89,15 @@ it can be pinned from pytest this way** — that is the only test runner this di
   re-derive the path from the terminal event's `path` (those are node ids). `onStep(step,
   index)` fires right after `trace.addStep` for the same step, with that step's 0-based
   arrival index (`picks.length - 1`) — US-006's trace rail is built on this rather than
-  reading `Trace`'s rendered DOM.
+  reading `Trace`'s rendered DOM. `data-state="active"` marks the single node whose
+  inference is currently in flight (`this.active`), derived client-side because the
+  backend only yields a `Step` after a node's inference *returns* — there is no "about
+  to infer" wire event. `started.root` activates the root; each `step.next_node_id`
+  activates the next frontier right after that step's own node flips to `visited`;
+  every terminal path (`completed`/`unplaced`/`error`) clears `this.active` to `null`
+  after flipping the frontier node to `visited`/`warning`. A future story touching the
+  frontier should extend `activate()`/the `handle()` branches rather than tracking a
+  second copy of "where the model is" elsewhere.
 - `trace-panel.js` — the collapsed trace rail and the slide-over panel it opens. `trace.js`'s
   public API is frozen, so the **panel** is just `index.html` chrome around the exact
   `trace-total`/`trace-list` elements `Trace` already renders into — no module owns it.

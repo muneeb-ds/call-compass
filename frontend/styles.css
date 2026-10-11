@@ -617,6 +617,39 @@ body {
   stroke-dasharray: 5 3;
 }
 
+/* Where the model is right now: a heavier accent ring than `visited` plus a looping
+ * glow, so the single in-flight node reads as "running" rather than "done" even at
+ * projector distance. The ring itself (stroke) is the thing `prefers-reduced-motion`
+ * falls back to below — only the glow animation is suppressed. */
+.tree-node[data-state="active"] .tree-box {
+  fill: var(--accent-fill);
+  stroke: var(--accent);
+  stroke-width: 3;
+  animation: tree-active-pulse 1.4s ease-out infinite;
+}
+
+.tree-node[data-state="active"][data-kind="leaf"] .tree-box {
+  fill: var(--success-fill-strong);
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+@keyframes tree-active-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 color-mix(in srgb, var(--accent) 0%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 70%, transparent));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-node[data-state="active"] .tree-box {
+    animation: none;
+  }
+}
+
 .tree-edge[data-state="visited"] {
   stroke: var(--accent);
   stroke-width: 2.5;

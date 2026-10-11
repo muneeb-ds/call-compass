@@ -110,11 +110,17 @@ const trace = new Trace(totalEl, listEl);
 const analysis = new Analysis(trace, view);
 
 const frames = [];
+// The active node right after each frame is handled, so a test can pin the frontier
+// across the whole run — including that it is null before `started` processes and
+// after any terminal/error event, and never more than one id between those.
+const frontier = [];
 const handled = analysis.handle.bind(analysis);
 analysis.handle = (frame) => {
   frames.push([frame.event, frame.data]);
   if (frames.length === abortAfter) analysis.cancel();
-  return handled(frame);
+  const result = handled(frame);
+  frontier.push(analysis.active);
+  return result;
 };
 
 let terminal = null;
@@ -161,6 +167,8 @@ process.stdout.write(
     })),
     nodes: states(view.nodeEls),
     edges: states(view.edgeEls),
+    frontier,
+    activeAfterRun: analysis.active,
     details: Object.fromEntries(
       [...view.detailEls].map(([id, el]) => [id, el.children.map((c) => c.textContent)]),
     ),

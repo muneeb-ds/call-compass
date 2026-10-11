@@ -146,7 +146,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-023, and the one genuinely non-obvious piece of v2. The backend yields a Step only AFTER that node's generate() returns, so there is no 'about to infer' frame on the wire - but the next node is fully determined: tree.root after `started`, step.next_node_id after each step. That is exactly the inference stream.py already makes internally to attribute an error to a node. Derive it client-side; do NOT add a backend event type. Highlighting must keep its existing contract of only flipping data-state and writing detail text, never re-rendering, or the ~120ms CSS transitions break."
     },
     {

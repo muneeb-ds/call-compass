@@ -171,6 +171,36 @@ def test_one_trace_card_per_step_with_the_prd_shape(happy: dict[str, Any]) -> No
 
 
 @requires_node
+def test_frontier_advances_one_node_at_a_time_and_clears_on_completion(
+    happy: dict[str, Any],
+) -> None:
+    # `started` activates the root; each `step` flips its own node to visited and
+    # activates `next_node_id`; `completed` flips the leaf to visited and the
+    # frontier goes empty — exactly one active id at a time, right up to the end.
+    assert happy["frontier"] == [
+        "intent",
+        "pricing_focus",
+        "tier_fit",
+        "objection_or_signal",
+        "out_value_reframe",
+        None,
+        None,
+    ]
+    assert happy["activeAfterRun"] is None
+    assert "active" not in set(happy["nodes"].values())
+
+
+@requires_node
+def test_exactly_one_node_is_active_mid_run(happy_body: str, tmp_path: Path) -> None:
+    frames = happy_body.split("\n\n")
+    partial = "\n\n".join(frames[:3]) + "\n\n"  # started + two steps
+    result = run_harness(partial, tmp_path)
+    active = {node for node, state in result["nodes"].items() if state == "active"}
+    assert active == {"tier_fit"}
+    assert result["frontier"][-1] == "tier_fit"
+
+
+@requires_node
 def test_running_total_matches_the_backends_own_figure(
     happy: dict[str, Any], happy_body: str
 ) -> None:
@@ -243,6 +273,9 @@ def test_unplaced_marks_the_stopping_node_without_lighting_it(
     # A run that declined at the root still spent inference time, so a total shows.
     (unplaced,) = [data for name, data in result["frames"] if name == "unplaced"]
     assert result["total"] == f"Total: {unplaced['total_inference_ms']} ms"
+    # The root became active on `started` and the frontier clears on `unplaced`.
+    assert result["frontier"] == ["intent", None, None]
+    assert result["activeAfterRun"] is None
 
 
 @requires_node
@@ -274,6 +307,10 @@ def test_error_event_leaves_a_recoverable_state(error_body: str, tmp_path: Path)
     assert "intent" in result["error"]["message"]
     assert result["failure"] is None
     assert result["running"] is False
+    # The failing node was the frontier; `error` clears it rather than leaving it active.
+    assert result["frontier"] == ["intent", None, None]
+    assert result["nodes"]["intent"] == "warning"
+    assert result["activeAfterRun"] is None
 
 
 @requires_node
