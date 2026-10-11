@@ -293,6 +293,19 @@ the markup by hand produces a picture that is wrong in ways that read as app bug
 
 ## Conventions
 
+- **Focus and motion are handled once, centrally, in `styles.css`.** A single
+  `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }` rule at
+  the top of the file covers every interactive control — don't add a per-component
+  focus style. Tab order is DOM order (no `tabindex` anywhere); keep a new control's
+  markup position equal to its visual position rather than reordering via CSS. Every
+  animation introduced for v2 (the active-node pulse, the viewport's viewBox tween,
+  the trace panel slide, the dock's state-change transition) has a matching
+  `@media (prefers-reduced-motion: reduce)` override next to its definition — a new
+  one needs the same pairing. The `active` tree-node state keeps a **static** halo
+  (`filter: drop-shadow(...)`, not just the animated keyframe) specifically so it
+  stays visually distinct from `visited` by shape/ring even with the loop suppressed
+  — never rely on `stroke`/fill colour alone to distinguish a node state, since colour
+  is the one channel reduced-motion and colour-blind viewers can't be assumed to read.
 - **SVG text that sits over the graph gets a halo**, not a z-order fix: `paint-order: stroke`
   plus a `stroke: var(--bg)` (see `.tree-detail`). Node groups already paint after the edge
   layer, and it is still unreadable where a freshly-lit edge runs under the text.

@@ -114,6 +114,16 @@
   box-sizing: border-box;
 }
 
+/* Every interactive control gets a visible, token-built focus ring - keyboard-only
+ * (`:focus-visible`), so a mouse click never shows a ring a pointer user didn't ask
+ * for. Chrome/Firefox/Safari all clip `outline` to the element's own `border-radius`,
+ * so this one rule looks right on the round record button, the pill buttons, and the
+ * trace chips alike without a per-shape override. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 html,
 body {
   height: 100%;
@@ -625,6 +635,13 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--elevation-3);
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock {
+    transition: none;
+  }
 }
 
 .tree-edge {
@@ -704,6 +721,7 @@ body {
   fill: var(--accent-fill);
   stroke: var(--accent);
   stroke-width: 3;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 55%, transparent));
   animation: tree-active-pulse 1.4s ease-out infinite;
 }
 
@@ -716,16 +734,21 @@ body {
 @keyframes tree-active-pulse {
   0%,
   100% {
-    filter: drop-shadow(0 0 0 color-mix(in srgb, var(--accent) 0%, transparent));
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 55%, transparent));
   }
   50% {
     filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 70%, transparent));
   }
 }
 
+/* Reduced motion keeps only the static half of the halo (the `0%`/`100%` keyframe
+ * value, set directly here) plus the heavier `stroke-width` above - between them,
+ * `active` is still visually distinct from `visited` by shape/ring alone, not by
+ * colour or brightness, even with the loop removed. */
 @media (prefers-reduced-motion: reduce) {
   .tree-node[data-state="active"] .tree-box {
     animation: none;
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 55%, transparent));
   }
 }
 
