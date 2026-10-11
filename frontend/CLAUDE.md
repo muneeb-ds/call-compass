@@ -171,6 +171,25 @@ it can be pinned from pytest this way** — that is the only test runner this di
   — and `reset()` runs at the top of every `run()`, not only from the Reset button —
   which is what makes "auto-follow resumes on the next run or on reset" free without a
   second code path.
+- `position.js` — the status bar's position readout. `formatPosition({label, depth,
+  maxDepth, inferenceCount})` is pure and omits the `· inference N` segment when
+  `inferenceCount` is `null`/omitted, which is the only difference between the pre-run
+  and in-run text. `PositionReadout(el)` owns the drawing half and takes its element
+  as a constructor argument like every other module here. `setLayout(layout, rootId)`
+  attaches the same `layoutTree` result `viewport.js` reads (never a second depth
+  calculation, never the config's documentary `level` field — `node.level` is
+  0-indexed, the readout's `Depth D` is `level + 1`) and shows the pre-run root
+  statement with no count. `activate(id)` is wired to `Analysis.onActivate` and
+  increments its own running inference count on every frontier move — the same hook
+  `viewport.js`'s auto-follow uses, so "where the model is" has one source. `finish(id,
+  inferenceCount)` is wired to `onTerminal`/`onError` and freezes the readout
+  (`this.done` blocks any further `activate()`); `completed`/`unplaced` pass the
+  terminal event's own authoritative `inference_count` rather than trusting the
+  client's running count, which only ever matches it by coincidence — the client counts
+  frontier moves (one extra, for the leaf becoming active with no step of its own),
+  the backend counts actual `generate()` calls. An `error` event carries no count, so
+  it freezes on whatever the client had already tracked. `reset(rootId)` (wired to
+  `Analysis.onReset`) returns to the pre-run statement for the next run.
 - `reset.js` — the Reset button. `resetAll({analysis, capture})` is the teardown and is
   pure wiring, so its **order** is assertable from node: cancel the in-flight stream
   *before* clearing, or a chunk already in flight repaints a node the tree just dimmed.
@@ -185,9 +204,11 @@ it can be pinned from pytest this way** — that is the only test runner this di
   inside the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
   traversal without inventing a second flag. `wireAnalysis(loading, {onFinish})` reports a run
   ending by **any** route through that one hook; it also builds the `TraceRail`/`TracePanel`
-  pair and wires `analysis.onStep`/`onReset` to the rail. `main()` returns
-  `{ analysis, outcome, panel, capture, reset, loading }` — drive those rather than
-  re-querying the DOM.
+  pair and wires `analysis.onStep`/`onReset` to the rail, and builds the `PositionReadout`,
+  calling its `setLayout` once `loading` resolves (`rootId` is captured there too, for
+  `onReset`). `main()` returns
+  `{ analysis, outcome, panel, viewport, position, capture, reset, loading }` — drive
+  those rather than re-querying the DOM.
   Teardown is never re-derived: `capture.reset()` and `Analysis.reset()` each own their half,
   and a story that adds UI should clear it from the owning half or from `Analysis.onReset`.
 

@@ -208,7 +208,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-025. Depends on US-007's frontier tracking for the active node id. Reuse the same layout object US-008 reads - do not recompute depth."
     },
     {

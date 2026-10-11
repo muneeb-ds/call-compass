@@ -8,6 +8,7 @@ import { Analysis } from "./analysis.js";
 import { MicrophoneError, Recorder } from "./capture.js";
 import { Playback } from "./playback.js";
 import { OutcomeStrip } from "./outcome.js";
+import { PositionReadout } from "./position.js";
 import { ResetControl, resetAll } from "./reset.js";
 import { AnalyzeError } from "./sse.js";
 import { RecordingTimer } from "./timer.js";
@@ -229,7 +230,7 @@ export function wireCapture(hooks = {}) {
  *   any route — a terminal event, an `error` event, or a rejected upload — which is
  *   what arms the Reset button. A cancelled run is not a finish and does not call it.
  * @returns {{analysis: Analysis, outcome: OutcomeStrip, panel: TracePanel, viewport: Viewport,
- *            onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
+ *            position: PositionReadout, onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
  */
 export function wireAnalysis(loading, hooks = {}) {
   const finished = () => {
@@ -247,6 +248,7 @@ export function wireAnalysis(loading, hooks = {}) {
     document.getElementById("trace-list"),
   );
   const outcome = new OutcomeStrip(document.getElementById("outcome-strip"));
+  const position = new PositionReadout(document.getElementById("position-readout"));
   const panel = new TracePanel(
     document.getElementById("trace-panel"),
     document.getElementById("trace-toggle"),
@@ -282,32 +284,47 @@ export function wireAnalysis(loading, hooks = {}) {
     const rect = svg.getBoundingClientRect();
     const aspect = rect.height > 0 ? rect.width / rect.height : 16 / 9;
     viewport.autoGoTo(frameFor(layout, id, aspect));
+    position.activate(id);
   };
   // The strip is drawn from the terminal event only, so an in-flight run never shows
   // an outcome; `reset()` (a new run, or US-016's button) takes it away again. A new
   // run re-arms auto-follow, too — `reset()` runs at the top of every `run()`, not
   // only from the Reset button, which is what makes "resumes on the next run" free.
+  /** @type {string|null} the tree's root id, known once `loading` resolves. */
+  let rootId = null;
   analysis.onReset = () => {
     outcome.clear();
     rail.reset();
     viewport.follow();
+    position.reset(rootId);
   };
   analysis.onTerminal = (frame) => {
-    if (frame.event === "completed") outcome.completed(frame.data, analysis.picks);
-    if (frame.event === "unplaced") outcome.unplaced(frame.data, analysis.picks);
+    if (frame.event === "completed") {
+      outcome.completed(frame.data, analysis.picks);
+      position.finish(frame.data.leaf_node_id, frame.data.inference_count);
+    }
+    if (frame.event === "unplaced") {
+      outcome.unplaced(frame.data, analysis.picks);
+      position.finish(frame.data.stopped_at_node_id, frame.data.inference_count);
+    }
     rail.setTotal(frame.data.total_inference_ms);
     finished();
   };
   // An `error` event is a finished run, so it gets a strip of its own rather than
-  // leaving the dock on its pre-run absent state as if nothing had happened.
+  // leaving the dock on its pre-run absent state as if nothing had happened. It carries
+  // no authoritative inference count, so the readout freezes on the count it already
+  // tracked from `onActivate`.
   analysis.onError = (payload) => {
     outcome.errored(payload);
+    position.finish(payload.node_id);
     finished();
   };
   void loading.then((loaded) => {
     if (!loaded) return;
     analysis.view = loaded.view;
     viewport.setLayout(loaded.view.layout);
+    rootId = loaded.tree.root;
+    position.setLayout(loaded.view.layout, rootId);
   });
 
   /** @param {{bytes: Uint8Array}} recording */
@@ -334,7 +351,7 @@ export function wireAnalysis(loading, hooks = {}) {
     }
   }
 
-  return { analysis, outcome, panel, viewport, onRecording };
+  return { analysis, outcome, panel, viewport, position, onRecording };
 }
 
 /** Page entry point. Exported so a later story can wire the same parts differently. */
@@ -347,12 +364,12 @@ export function main() {
     /** @type {HTMLButtonElement} */ (document.getElementById("reset-button")),
     () => resetAll({ analysis, capture }),
   );
-  const { analysis, outcome, panel, viewport, onRecording } = wireAnalysis(loading, {
+  const { analysis, outcome, panel, viewport, position, onRecording } = wireAnalysis(loading, {
     onFinish: () => reset.arm(),
   });
   const capture = wireCapture({ onRecording });
   reset.button.addEventListener("click", () => reset.trigger());
-  return { analysis, outcome, panel, viewport, capture, reset, loading };
+  return { analysis, outcome, panel, viewport, position, capture, reset, loading };
 }
 
 main();
