@@ -8,7 +8,10 @@
 //
 // Everything is wired exactly as app.js wires it — `resetAll` over the real `Analysis`
 // plus a stub capture half, armed only by a finished run — so the button's enablement
-// rule is checked here rather than read off the markup.
+// rule is checked here rather than read off the markup. US-030 extends this to the
+// surfaces app.js's `analysis.onReset` reaches that weren't drawn by earlier stories:
+// the trace rail, the position readout, and the viewport — the panel's open state is
+// deliberately *not* among them, since it is a viewer preference, not run state.
 //
 // Usage: node reset_fixture.mjs <tree.json> <sse-body-file> [--chunk=N]
 //        [--reset-after=N] [--arm-first]  ->  JSON on stdout
@@ -24,6 +27,8 @@ const { TreeView } = await load("tree.js");
 const { Trace } = await load("trace.js");
 const { Analysis } = await load("analysis.js");
 const { OutcomeStrip } = await load("outcome.js");
+const { PositionReadout } = await load("position.js");
+const { TraceRail, TracePanel } = await load("trace-panel.js");
 const { ResetControl, resetAll } = await load("reset.js");
 
 const flag = (name) => process.argv.includes(`--${name}`);
@@ -37,7 +42,9 @@ const body = await readFile(process.argv[3], "utf8");
 const chunk = arg("chunk", 0) || body.length;
 const resetAfter = arg("reset-after", -1);
 
-/** The smallest element that satisfies what these modules do to one. */
+/** The smallest element that satisfies what these modules do to one, plus the
+ * listener bookkeeping `TracePanel`/`TraceRail` need (`addEventListener`, unused here
+ * but required by their constructors). */
 function element(name) {
   return {
     name,
@@ -47,6 +54,7 @@ function element(name) {
     className: "",
     textContent: "",
     disabled: false,
+    listeners: {},
     ownerDocument: {
       createElementNS: (_ns, n) => element(n),
       createElement: (n) => element(n),
@@ -59,6 +67,9 @@ function element(name) {
     },
     replaceChildren(...kids) {
       this.children = [...kids];
+    },
+    addEventListener(type, fn) {
+      (this.listeners[type] ??= []).push(fn);
     },
   };
 }
@@ -100,7 +111,35 @@ const analysis = new Analysis(trace, view);
 const outcomeEl = element("p");
 const outcome = new OutcomeStrip(outcomeEl);
 outcome.clear();
-analysis.onReset = () => outcome.clear();
+
+const chipListEl = element("div");
+const chipTotalEl = element("p");
+const rail = new TraceRail(chipListEl, chipTotalEl);
+rail.reset();
+
+const panelEl = element("aside");
+const toggleEl = element("button");
+const panel = new TracePanel(panelEl, toggleEl);
+// Stands for a viewer having opened the panel earlier in the demo — it must survive
+// a run and a reset, since it is a preference rather than run state.
+panel.open();
+
+const positionEl = element("p");
+const position = new PositionReadout(positionEl);
+position.setLayout(view.layout, tree.root);
+
+// The viewport is DOM-animation glue reviewed rather than node-tested elsewhere in
+// this directory (see viewport.js's own fixture) — here only `resetView()` needs to
+// be *called* by `resetAll`'s cascade, so a call-counting stub is enough.
+const viewport = { resetViewCalls: 0, resetView() { this.resetViewCalls += 1; } };
+
+analysis.onStep = (step, index) => rail.addStep(step, index);
+analysis.onReset = () => {
+  outcome.clear();
+  rail.reset();
+  viewport.resetView();
+  position.reset(tree.root);
+};
 
 // The capture half, stood in for: `resetAll` only needs `reset()`, and app.js's own
 // version of it is DOM wiring that cannot be loaded here. Counting the calls is what
@@ -130,13 +169,22 @@ analysis.handle = (frame) => {
   return out;
 };
 
+analysis.onActivate = (id) => position.activate(id);
 analysis.onTerminal = (frame) => {
-  if (frame.event === "completed") outcome.completed(frame.data, analysis.picks);
-  if (frame.event === "unplaced") outcome.unplaced(frame.data, analysis.picks);
+  if (frame.event === "completed") {
+    outcome.completed(frame.data, analysis.picks);
+    position.finish(frame.data.leaf_node_id, frame.data.inference_count);
+  }
+  if (frame.event === "unplaced") {
+    outcome.unplaced(frame.data, analysis.picks);
+    position.finish(frame.data.stopped_at_node_id, frame.data.inference_count);
+  }
+  rail.setTotal(frame.data.total_inference_ms);
   control.arm();
 };
 analysis.onError = (payload) => {
   outcome.errored(payload);
+  position.finish(payload.node_id);
   control.arm();
 };
 
@@ -167,6 +215,11 @@ function snapshot() {
       text: line ? line.textContent : null,
     },
     captureResets: capture.resets,
+    railChips: chipListEl.children.length,
+    railTotal: chipTotalEl.textContent,
+    panelOpen: panel.isOpen,
+    position: positionEl.textContent,
+    viewportResetViewCalls: viewport.resetViewCalls,
   };
 }
 

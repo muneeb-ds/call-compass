@@ -279,6 +279,21 @@ export class Viewport {
     if (this.lastAutoTarget) this.goTo(this.lastAutoTarget);
   }
 
+  /**
+   * Re-arms auto-follow and returns the camera to the whole-tree frame, discarding
+   * whatever frontier position the last run left behind. Unlike `follow()` — which
+   * jumps back to `lastAutoTarget` so a re-armed camera mid-run returns to where the
+   * model currently is — this is for the start of a *new* take: a reset (the Reset
+   * button, or the top of every `Analysis.run()`) must not open on the previous run's
+   * leaf, it has to open on the whole tree, exactly as a fresh page load would.
+   */
+  resetView() {
+    this.lastAutoTarget = null;
+    this.following = true;
+    if (this.followButton) this.followButton.disabled = true;
+    if (this.layout) this.goTo(frameWholeTree(this.layout, this.aspect()));
+  }
+
   /** Frames the whole tree. A manual interaction, like pan and zoom, so it disables follow. */
   fit() {
     if (!this.layout) return;

@@ -216,10 +216,14 @@ it can be pinned from pytest this way** — that is the only test runner this di
   split as `goTo`'s animation loop. Any manual pan/zoom/`fit()` calls
   `disableFollow()`, which enables the Follow button (per this file's "disabled, never
   hidden" rule, it is never `hidden`); `follow()` re-arms `following` and jumps back to
-  `lastAutoTarget` if a run is in flight. `Analysis.onReset` calls `viewport.follow()`
-  — and `reset()` runs at the top of every `run()`, not only from the Reset button —
-  which is what makes "auto-follow resumes on the next run or on reset" free without a
-  second code path.
+  `lastAutoTarget`. `resetView()` (US-030) is the other re-arming path and is distinct
+  from `follow()`: it clears `lastAutoTarget` and goes to the **whole-tree frame**
+  instead, because the start of a new take (a fresh run, or the Reset button) must not
+  open the camera on the previous run's leaf — `follow()` is for re-arming auto-follow
+  *mid-run*, `resetView()` is for the boundary between runs. `Analysis.onReset` calls
+  `viewport.resetView()` — and `reset()` runs at the top of every `run()`, not only from
+  the Reset button — which is what makes "auto-follow resumes and the camera returns to
+  the whole tree on the next run or on reset" free without a second code path.
 - `position.js` — the status bar's position readout. `formatPosition({label, depth,
   maxDepth, inferenceCount})` is pure and omits the `· inference N` segment when
   `inferenceCount` is `null`/omitted, which is the only difference between the pre-run
@@ -242,10 +246,17 @@ it can be pinned from pytest this way** — that is the only test runner this di
 - `reset.js` — the Reset button. `resetAll({analysis, capture})` is the teardown and is
   pure wiring, so its **order** is assertable from node: cancel the in-flight stream
   *before* clearing, or a chunk already in flight repaints a node the tree just dimmed.
-  `ResetControl(button, onReset)` keeps its state in the DOM's own `disabled` — there is
-  no second copy — and `trigger()` is a no-op while disarmed. It is armed only by a
-  **finished** run (terminal event, `error` event, or a rejected upload) and disarmed by
-  its own press, which is what lets it stay live across a later run and cancel it.
+  `analysis.reset()` cascades, through the `onReset` hook `app.js` wires, into every
+  surface that only came into existence in a later story — the trace rail, the outcome
+  strip, the viewport (back to the whole-tree frame, auto-follow re-armed), and the
+  position readout (back to the root) — so `resetAll` itself never grew new parameters
+  as those stories landed. The **one** surface deliberately left alone by that cascade
+  is the trace panel's open/closed state — a viewer preference, not run state, so it
+  survives both a run and a Reset press. `ResetControl(button, onReset)` keeps its
+  state in the DOM's own `disabled` — there is no second copy — and `trigger()` is a
+  no-op while disarmed. It is armed only by a **finished** run (terminal event, `error`
+  event, or a rejected upload) and disarmed by its own press, which is what lets it
+  stay live across a later run and cancel it.
 - `app.js` — page wiring only. Exports its entry points (`checkHealth`, `loadTree`,
   `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
   re-deriving. `wireCapture({onRecording})` returns

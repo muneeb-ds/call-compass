@@ -309,7 +309,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-030. Deliberately late: it can only clear surfaces that already exist. The abort-before-clear order matters - per frontend/CLAUDE.md, clearing before aborting lets a chunk already in flight repaint a node the tree just dimmed."
     },
     {

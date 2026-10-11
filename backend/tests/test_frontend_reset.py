@@ -144,6 +144,41 @@ def test_reset_clears_the_outcome_strip(cycle: dict[str, Any]) -> None:
 
 
 @requires_node
+def test_reset_clears_the_trace_rail(cycle: dict[str, Any]) -> None:
+    assert cycle["afterFirstRun"]["railChips"] == 4
+    assert cycle["afterFirstRun"]["railTotal"].startswith("Total: ")
+    assert cycle["afterReset"]["railChips"] == 0
+    assert cycle["afterReset"]["railTotal"] == "Total: —"
+
+
+@requires_node
+def test_reset_returns_the_position_readout_to_the_root(cycle: dict[str, Any]) -> None:
+    """A finished run freezes on the leaf; Reset returns to the pre-run statement."""
+    assert cycle["initial"]["position"] == cycle["afterReset"]["position"]
+    assert cycle["afterFirstRun"]["position"] != cycle["initial"]["position"]
+    assert "inference" in cycle["afterFirstRun"]["position"]
+    assert "inference" not in cycle["afterReset"]["position"]
+
+
+@requires_node
+def test_reset_returns_the_viewport_to_the_whole_tree_frame(cycle: dict[str, Any]) -> None:
+    """`analysis.onReset` calls `viewport.resetView()` once per `Analysis.reset()` —
+    once at the top of the first run, and again on the Reset press itself."""
+    assert cycle["afterFirstRun"]["viewportResetViewCalls"] == 1
+    assert cycle["afterReset"]["viewportResetViewCalls"] == 2
+
+
+@requires_node
+def test_reset_does_not_touch_the_trace_panels_open_state(cycle: dict[str, Any]) -> None:
+    """The panel's open/closed state is a viewer preference, not run state — it must
+    survive both a run and a Reset press untouched."""
+    assert cycle["initial"]["panelOpen"] is True
+    assert cycle["afterFirstRun"]["panelOpen"] is True
+    assert cycle["afterReset"]["panelOpen"] is True
+    assert cycle["afterSecondRun"]["panelOpen"] is True
+
+
+@requires_node
 def test_reset_disarms_itself_and_a_second_press_does_nothing(cycle: dict[str, Any]) -> None:
     assert cycle["pressed"] is True
     assert cycle["afterReset"]["armed"] is False

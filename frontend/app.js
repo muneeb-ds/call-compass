@@ -353,7 +353,7 @@ export function wireAnalysis(loading, hooks = {}) {
   analysis.onReset = () => {
     outcome.clear();
     rail.reset();
-    viewport.follow();
+    viewport.resetView();
     position.reset(rootId);
   };
   analysis.onTerminal = (frame) => {
