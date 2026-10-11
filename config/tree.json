@@ -1,6 +1,6 @@
 {
-  "tree_id": "northbeam-saas-v1",
-  "version": "1.0.0",
+  "tree_id": "northbeam-saas-v2",
+  "version": "2.0.0",
   "product": "Northbeam Analytics (B2B SaaS subscription)",
   "root": "intent",
   "nodes": {
@@ -19,7 +19,7 @@
             "enum": ["plan_cost", "billing_terms", "discount"],
             "description": "The specific pricing concern raised."
           },
-          "next": "product_interest"
+          "next": "pricing_focus"
         },
         {
           "tool_name": "feature_question",
@@ -29,7 +29,37 @@
             "enum": ["dashboards", "integrations", "data_export"],
             "description": "The capability the customer asked about."
           },
-          "next": "product_interest"
+          "next": "feature_fit"
+        },
+        {
+          "tool_name": "competitor_mention",
+          "description": "The customer names another vendor or an alternative tool they use or are weighing.",
+          "argument": {
+            "name": "mention_context",
+            "enum": ["currently_using", "comparing", "under_contract"],
+            "description": "How the other tool came up."
+          },
+          "next": "competitor_posture"
+        },
+        {
+          "tool_name": "existing_account",
+          "description": "The speaker is already a customer, talking about the account they have rather than buying a new one.",
+          "argument": {
+            "name": "account_topic",
+            "enum": ["more_seats", "renewal", "not_working"],
+            "description": "What they raised about their existing account."
+          },
+          "next": "account_signal"
+        },
+        {
+          "tool_name": "buying_signal",
+          "description": "The customer is moving forward: asking about next steps, trials, demos, or paperwork.",
+          "argument": {
+            "name": "readiness",
+            "enum": ["wants_trial", "wants_demo", "ready_to_buy"],
+            "description": "How ready they are to proceed."
+          },
+          "next": "close_path"
         },
         {
           "tool_name": "not_interested",
@@ -39,16 +69,236 @@
             "enum": ["firm", "soft", "defer_to_later"],
             "description": "How firmly the customer is declining."
           },
-          "next": "rec_graceful_exit"
+          "next": "out_graceful_exit"
         }
       ]
     },
 
-    "product_interest": {
-      "id": "product_interest",
+    "pricing_focus": {
+      "id": "pricing_focus",
       "type": "branch",
-      "label": "Product interest",
+      "label": "Pricing concern",
       "level": 2,
+      "prompt_hint": "Which part of the pricing is the customer actually asking about?",
+      "options": [
+        {
+          "tool_name": "plan_cost_question",
+          "description": "They want to know what a plan costs or which plan they would need.",
+          "argument": {
+            "name": "cost_frame",
+            "enum": ["per_seat", "total_contract", "compared_to_current"],
+            "description": "How they framed the cost question."
+          },
+          "next": "tier_fit"
+        },
+        {
+          "tool_name": "discount_request",
+          "description": "They are asking for a lower price, a discount, or saying the price is a problem.",
+          "argument": {
+            "name": "discount_angle",
+            "enum": ["too_expensive", "competitor_cheaper", "wants_annual_deal"],
+            "description": "The angle the discount request takes."
+          },
+          "next": "budget_depth"
+        },
+        {
+          "tool_name": "billing_terms_question",
+          "description": "They are asking about invoicing, payment terms, contract length, or how billing works.",
+          "argument": {
+            "name": "terms_topic",
+            "enum": ["invoicing", "contract_length", "payment_method"],
+            "description": "The billing mechanic they asked about."
+          },
+          "next": "out_billing_answer"
+        }
+      ]
+    },
+
+    "feature_fit": {
+      "id": "feature_fit",
+      "type": "branch",
+      "label": "Capability asked about",
+      "level": 2,
+      "prompt_hint": "Which capability area does the question land in?",
+      "options": [
+        {
+          "tool_name": "dashboards_and_reporting",
+          "description": "Dashboards, charts, scheduled reports, or sharing results with others.",
+          "argument": {
+            "name": "reporting_need",
+            "enum": ["prebuilt_dashboards", "custom_reports", "scheduled_delivery"],
+            "description": "The reporting need described."
+          },
+          "next": "tier_fit"
+        },
+        {
+          "tool_name": "integrations_and_api",
+          "description": "Connecting to another system, an API, webhooks, or a specific named integration.",
+          "argument": {
+            "name": "integration_need",
+            "enum": ["named_connector", "rest_api", "webhooks"],
+            "description": "The integration need described."
+          },
+          "next": "tier_fit"
+        },
+        {
+          "tool_name": "data_export",
+          "description": "Getting data out: CSV export, a warehouse sync, or raw data access.",
+          "argument": {
+            "name": "export_need",
+            "enum": ["csv_download", "warehouse_sync", "raw_access"],
+            "description": "The export need described."
+          },
+          "next": "tier_fit"
+        },
+        {
+          "tool_name": "unsupported_capability",
+          "description": "They asked for something the product does not do at all.",
+          "argument": {
+            "name": "gap_kind",
+            "enum": ["wrong_category", "on_roadmap", "never_planned"],
+            "description": "The kind of gap the request falls into."
+          },
+          "next": "out_capability_gap"
+        }
+      ]
+    },
+
+    "competitor_posture": {
+      "id": "competitor_posture",
+      "type": "branch",
+      "label": "Competitor posture",
+      "level": 2,
+      "prompt_hint": "What is the customer's relationship with the other tool?",
+      "options": [
+        {
+          "tool_name": "evaluating_alternatives",
+          "description": "They are actively comparing options and have not committed to either.",
+          "argument": {
+            "name": "comparison_stage",
+            "enum": ["early_research", "shortlisted", "final_two"],
+            "description": "How far the comparison has gone."
+          },
+          "next": "tier_fit"
+        },
+        {
+          "tool_name": "already_using_incumbent",
+          "description": "They already run the other tool day to day and are not shopping.",
+          "argument": {
+            "name": "incumbent_sentiment",
+            "enum": ["happy", "frustrated", "neutral"],
+            "description": "How they speak about the tool they have."
+          },
+          "next": "out_displace_incumbent"
+        },
+        {
+          "tool_name": "contract_locked",
+          "description": "They say they are tied into an existing agreement and cannot move yet.",
+          "argument": {
+            "name": "lock_horizon",
+            "enum": ["months_left", "renews_next_year", "auto_renewed"],
+            "description": "How long the lock-in runs."
+          },
+          "next": "out_renewal_timing"
+        }
+      ]
+    },
+
+    "account_signal": {
+      "id": "account_signal",
+      "type": "branch",
+      "label": "Existing account signal",
+      "level": 2,
+      "prompt_hint": "What is this existing customer telling us about their account?",
+      "options": [
+        {
+          "tool_name": "expansion_interest",
+          "description": "They want more: more seats, another team, or a higher plan.",
+          "argument": {
+            "name": "expansion_driver",
+            "enum": ["more_seats", "another_team", "hit_a_limit"],
+            "description": "What is driving the expansion."
+          },
+          "next": "tier_fit"
+        },
+        {
+          "tool_name": "renewal_risk",
+          "description": "They are questioning whether to keep paying, or hinting at cancelling.",
+          "argument": {
+            "name": "risk_signal",
+            "enum": ["low_usage", "budget_cut", "team_changed"],
+            "description": "The signal behind the renewal risk."
+          },
+          "next": "out_retention_save"
+        },
+        {
+          "tool_name": "adoption_problem",
+          "description": "They have the product but cannot get the value out of it.",
+          "argument": {
+            "name": "blocker",
+            "enum": ["cannot_find_feature", "data_looks_wrong", "team_not_trained"],
+            "description": "What is blocking adoption."
+          },
+          "next": "out_enablement"
+        }
+      ]
+    },
+
+    "close_path": {
+      "id": "close_path",
+      "type": "branch",
+      "label": "Next step wanted",
+      "level": 2,
+      "prompt_hint": "Which concrete next step is the customer reaching for?",
+      "options": [
+        {
+          "tool_name": "wants_trial",
+          "description": "They want to try it themselves, hands on.",
+          "argument": {
+            "name": "trial_scope",
+            "enum": ["solo", "with_team", "with_own_data"],
+            "description": "How wide a trial they want."
+          },
+          "next": "out_start_trial"
+        },
+        {
+          "tool_name": "wants_demo",
+          "description": "They want to be shown it, live or recorded.",
+          "argument": {
+            "name": "demo_audience",
+            "enum": ["just_them", "their_team", "their_leadership"],
+            "description": "Who the demo is for."
+          },
+          "next": "out_book_demo"
+        },
+        {
+          "tool_name": "wants_proposal",
+          "description": "They are asking for pricing in writing, a quote, or paperwork to review.",
+          "argument": {
+            "name": "document_wanted",
+            "enum": ["quote", "formal_proposal", "security_questionnaire"],
+            "description": "The document they asked for."
+          },
+          "next": "out_send_proposal"
+        },
+        {
+          "tool_name": "needs_stakeholders",
+          "description": "They are ready but say someone else has to be involved to go further.",
+          "argument": {
+            "name": "missing_party",
+            "enum": ["their_manager", "finance", "security_team"],
+            "description": "Who else has to be brought in."
+          },
+          "next": "out_multithread"
+        }
+      ]
+    },
+
+    "tier_fit": {
+      "id": "tier_fit",
+      "type": "branch",
+      "label": "Tier fit",
+      "level": 3,
       "prompt_hint": "Which tier does the customer's described scale and need point to?",
       "options": [
         {
@@ -59,7 +309,7 @@
             "enum": ["solo", "small_team"],
             "description": "Indicated team size."
           },
-          "next": "signal_check"
+          "next": "objection_or_signal"
         },
         {
           "tool_name": "pro_tier",
@@ -69,7 +319,7 @@
             "enum": ["scaling_team", "multi_product", "needs_integrations"],
             "description": "What indicates Pro-tier need."
           },
-          "next": "signal_check"
+          "next": "objection_or_signal"
         },
         {
           "tool_name": "enterprise_tier",
@@ -79,16 +329,56 @@
             "enum": ["security_review", "sso_required", "procurement_process"],
             "description": "The enterprise requirement mentioned."
           },
-          "next": "signal_check"
+          "next": "enterprise_gate"
         }
       ]
     },
 
-    "signal_check": {
-      "id": "signal_check",
+    "budget_depth": {
+      "id": "budget_depth",
+      "type": "branch",
+      "label": "Budget obstacle",
+      "level": 3,
+      "prompt_hint": "What exactly is in the way financially?",
+      "options": [
+        {
+          "tool_name": "price_too_high",
+          "description": "The number itself is the problem; they think it is not worth that much.",
+          "argument": {
+            "name": "value_gap",
+            "enum": ["unclear_roi", "cheaper_elsewhere", "small_use_case"],
+            "description": "Why the price reads as too high."
+          },
+          "next": "out_value_reframe"
+        },
+        {
+          "tool_name": "no_budget_this_period",
+          "description": "They want it but the money does not exist in this cycle.",
+          "argument": {
+            "name": "budget_horizon",
+            "enum": ["next_quarter", "next_fiscal_year", "frozen"],
+            "description": "When budget might appear."
+          },
+          "next": "out_timing_followup"
+        },
+        {
+          "tool_name": "needs_approval",
+          "description": "The money may exist but they personally cannot authorise it.",
+          "argument": {
+            "name": "approver",
+            "enum": ["their_manager", "finance", "procurement"],
+            "description": "Who has to sign off."
+          },
+          "next": "out_multithread"
+        }
+      ]
+    },
+
+    "objection_or_signal": {
+      "id": "objection_or_signal",
       "type": "branch",
       "label": "Objection or buying signal",
-      "level": 3,
+      "level": 4,
       "prompt_hint": "Is the customer pushing back, or leaning in?",
       "options": [
         {
@@ -99,7 +389,7 @@
             "enum": ["too_expensive", "no_budget_this_quarter", "needs_approval"],
             "description": "The nature of the budget obstacle."
           },
-          "next": "rec_budget"
+          "next": "out_value_reframe"
         },
         {
           "tool_name": "timing_objection",
@@ -109,7 +399,7 @@
             "enum": ["mid_project", "next_quarter", "team_change"],
             "description": "Why the timing is wrong."
           },
-          "next": "rec_timing"
+          "next": "out_timing_followup"
         },
         {
           "tool_name": "competitor_objection",
@@ -119,60 +409,156 @@
             "enum": ["already_using", "evaluating_both", "contract_locked"],
             "description": "Their relationship with the alternative."
           },
-          "next": "rec_competitor"
+          "next": "out_displace_incumbent"
         },
         {
-          "tool_name": "buying_signal",
+          "tool_name": "ready_to_proceed",
           "description": "The customer is moving forward: asking about next steps, trials, demos, or onboarding.",
           "argument": {
             "name": "readiness",
             "enum": ["wants_trial", "wants_demo", "ready_to_buy"],
             "description": "How ready they are to proceed."
           },
-          "next": "rec_advance"
+          "next": "out_advance_now"
         }
       ]
     },
 
-    "rec_budget": {
-      "id": "rec_budget",
-      "type": "leaf",
-      "label": "Reframe on value",
+    "enterprise_gate": {
+      "id": "enterprise_gate",
+      "type": "branch",
+      "label": "Enterprise requirement",
       "level": 4,
-      "recommendation": "Acknowledge the budget constraint, then move the conversation from price to cost-of-delay: ask what they currently spend in analyst hours pulling these numbers by hand. Offer the lower tier as a starting point rather than discounting the one they asked about.",
-      "rationale": "A budget objection is rarely about the number; it is about unproven value. Shrink the commitment instead of the price."
+      "prompt_hint": "Which enterprise gate has to be cleared first?",
+      "options": [
+        {
+          "tool_name": "security_review",
+          "description": "They need a security, privacy, or compliance review before anything else.",
+          "argument": {
+            "name": "review_kind",
+            "enum": ["questionnaire", "pen_test_report", "data_residency"],
+            "description": "The review artifact they need."
+          },
+          "next": "out_security_pack"
+        },
+        {
+          "tool_name": "sso_required",
+          "description": "Single sign-on, SCIM, or identity provider support is a hard requirement.",
+          "argument": {
+            "name": "identity_need",
+            "enum": ["saml", "scim_provisioning", "specific_idp"],
+            "description": "The identity requirement named."
+          },
+          "next": "out_security_pack"
+        },
+        {
+          "tool_name": "procurement_process",
+          "description": "A formal purchasing process, vendor onboarding, or legal review stands in the way.",
+          "argument": {
+            "name": "process_stage",
+            "enum": ["vendor_onboarding", "legal_review", "rfp"],
+            "description": "The procurement stage described."
+          },
+          "next": "out_procurement"
+        }
+      ]
     },
-    "rec_timing": {
-      "id": "rec_timing",
+
+    "out_graceful_exit": {
+      "id": "out_graceful_exit",
       "type": "leaf",
-      "label": "Secure a dated follow-up",
-      "level": 4,
-      "recommendation": "Agree that timing matters and do not push for a decision now. Pin down a specific date to revisit, and ask what needs to be true by then. Offer to send a short summary they can forward internally in the meantime.",
-      "rationale": "Timing objections are usually genuine. The win here is a dated next step, not a close."
+      "label": "Not interested",
+      "level": 2
     },
-    "rec_competitor": {
-      "id": "rec_competitor",
+    "out_billing_answer": {
+      "id": "out_billing_answer",
       "type": "leaf",
-      "label": "Differentiate, do not attack",
-      "level": 4,
-      "recommendation": "Do not criticize the tool they already use. Ask what it does well and where it falls short, then speak only to that gap. If they are locked into a contract, offer to run a parallel pilot so there is evidence ready at renewal.",
-      "rationale": "Attacking an incumbent attacks their past decision. Finding the gap gives them a reason to add you without admitting a mistake."
+      "label": "Billing terms question",
+      "level": 3
     },
-    "rec_advance": {
-      "id": "rec_advance",
+    "out_capability_gap": {
+      "id": "out_capability_gap",
       "type": "leaf",
-      "label": "Advance to next step now",
-      "level": 4,
-      "recommendation": "They are leaning in — stop selling and start scheduling. Confirm the tier, name the next concrete step, and get it on the calendar before the call ends. Ask who else needs to be in the room.",
-      "rationale": "A buying signal has a short shelf life. Converting it into a scheduled commitment on the call is the whole job."
+      "label": "Capability gap",
+      "level": 3
     },
-    "rec_graceful_exit": {
-      "id": "rec_graceful_exit",
+    "out_renewal_timing": {
+      "id": "out_renewal_timing",
       "type": "leaf",
-      "label": "Exit cleanly",
-      "level": 2,
-      "recommendation": "Thank them for their time and close without pressure. Ask one short question about whether the timing or the fit is the issue, accept the answer, and leave the door open for later.",
-      "rationale": "A clean exit preserves the option of a future conversation. Pressing a firm no destroys it."
+      "label": "Locked into a contract",
+      "level": 3
+    },
+    "out_retention_save": {
+      "id": "out_retention_save",
+      "type": "leaf",
+      "label": "Renewal at risk",
+      "level": 3
+    },
+    "out_enablement": {
+      "id": "out_enablement",
+      "type": "leaf",
+      "label": "Adoption problem",
+      "level": 3
+    },
+    "out_start_trial": {
+      "id": "out_start_trial",
+      "type": "leaf",
+      "label": "Trial requested",
+      "level": 3
+    },
+    "out_book_demo": {
+      "id": "out_book_demo",
+      "type": "leaf",
+      "label": "Demo requested",
+      "level": 3
+    },
+    "out_send_proposal": {
+      "id": "out_send_proposal",
+      "type": "leaf",
+      "label": "Proposal requested",
+      "level": 3
+    },
+    "out_multithread": {
+      "id": "out_multithread",
+      "type": "leaf",
+      "label": "Approval needed",
+      "level": 4
+    },
+    "out_value_reframe": {
+      "id": "out_value_reframe",
+      "type": "leaf",
+      "label": "Budget objection",
+      "level": 5
+    },
+    "out_timing_followup": {
+      "id": "out_timing_followup",
+      "type": "leaf",
+      "label": "Timing objection",
+      "level": 5
+    },
+    "out_displace_incumbent": {
+      "id": "out_displace_incumbent",
+      "type": "leaf",
+      "label": "Incumbent in place",
+      "level": 5
+    },
+    "out_advance_now": {
+      "id": "out_advance_now",
+      "type": "leaf",
+      "label": "Ready to proceed",
+      "level": 5
+    },
+    "out_security_pack": {
+      "id": "out_security_pack",
+      "type": "leaf",
+      "label": "Security review required",
+      "level": 5
+    },
+    "out_procurement": {
+      "id": "out_procurement",
+      "type": "leaf",
+      "label": "Procurement process",
+      "level": 5
     }
   }
 }

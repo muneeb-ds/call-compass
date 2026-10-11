@@ -29,9 +29,11 @@ from .fakes import NONE_OF_THESE_CALL, fake_engine, make_wav, picks
 
 HARNESS = Path(__file__).resolve().parent / "reset_fixture.mjs"
 
-#: The sample tree's happy path: intent -> product_interest -> signal_check -> leaf.
+#: The sample tree's deepest route: intent -> pricing_focus -> tier_fit ->
+#: objection_or_signal -> out_value_reframe. Four inferences, one per branch node.
 HAPPY_SCRIPT = [
     picks("pricing_question", pricing_focus="plan_cost"),
+    picks("plan_cost_question", cost_frame="per_seat"),
     picks("pro_tier", tier_signal="team_size"),
     picks("budget_objection", objection_strength="hard"),
 ]
@@ -93,6 +95,7 @@ def test_reset_is_disabled_until_a_run_has_finished(cycle: dict[str, Any]) -> No
         ["step", False],
         ["step", False],
         ["step", False],
+        ["step", False],
         ["completed", True],
         ["done", True],
     ]
@@ -114,7 +117,7 @@ def test_reset_clears_the_recording_and_playback_control(cycle: dict[str, Any]) 
 
 @requires_node
 def test_reset_clears_the_trace_column_and_the_total(cycle: dict[str, Any]) -> None:
-    assert len(cycle["afterFirstRun"]["cards"]) == 3
+    assert len(cycle["afterFirstRun"]["cards"]) == 4
     assert cycle["afterFirstRun"]["total"].startswith("Total: ")
     assert cycle["afterReset"]["cards"] == []
     assert cycle["afterReset"]["total"] == "Total: —"
@@ -124,7 +127,7 @@ def test_reset_clears_the_trace_column_and_the_total(cycle: dict[str, Any]) -> N
 def test_reset_returns_the_tree_to_its_fully_dimmed_state(cycle: dict[str, Any]) -> None:
     """No reload: the same drawn nodes go back to idle, and the annotations go away."""
     assert cycle["afterFirstRun"]["nodeStates"] == ["idle", "visited"]
-    assert cycle["afterFirstRun"]["annotated"] == 3
+    assert cycle["afterFirstRun"]["annotated"] == 4
     assert cycle["afterReset"]["nodeStates"] == ["idle"]
     assert cycle["afterReset"]["edgeStates"] == ["idle"]
     assert cycle["afterReset"]["annotated"] == 0
@@ -154,7 +157,7 @@ def test_two_consecutive_runs_do_not_accumulate(happy_body: str, tmp_path: Path)
     result = run_harness(happy_body, tmp_path)
     first, second = result["afterFirstRun"], result["afterSecondRun"]
     assert second["cards"] == first["cards"]
-    assert [card["index"] for card in second["cards"]] == ["0", "1", "2"]
+    assert [card["index"] for card in second["cards"]] == ["0", "1", "2", "3"]
     assert second["total"] == first["total"]
     assert second["picks"] == first["picks"]
     assert second["nodes"] == first["nodes"]
@@ -170,7 +173,7 @@ def test_a_run_without_an_intervening_reset_still_does_not_accumulate(
     """`Analysis.run()` resets first, so forgetting to press Reset is not a trap."""
     result = run_harness(happy_body, tmp_path, "--reset-after=99")
     assert result["pressed"] is True  # the reset-after never fired at frame 99
-    assert len(result["afterSecondRun"]["cards"]) == 3
+    assert len(result["afterSecondRun"]["cards"]) == 4
 
 
 @requires_node
@@ -197,6 +200,6 @@ def test_a_full_run_still_works_after_a_cancelled_one(happy_body: str, tmp_path:
     result = run_harness(happy_body, tmp_path, "--chunk=40", "--arm-first", "--reset-after=2")
     second = result["afterSecondRun"]
     assert second["terminal"] == "completed"
-    assert len(second["cards"]) == 3
+    assert len(second["cards"]) == 4
     assert second["result"]["state"] == "completed"
     assert second["armed"] is True

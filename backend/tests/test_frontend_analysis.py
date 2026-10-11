@@ -32,9 +32,11 @@ from .fakes import EMPTY_RESPONSE, NONE_OF_THESE_CALL, fake_engine, make_wav, pi
 
 HARNESS = Path(__file__).resolve().parent / "analysis_fixture.mjs"
 
-#: The sample tree's happy path: intent -> product_interest -> signal_check -> leaf.
+#: The sample tree's deepest route: intent -> pricing_focus -> tier_fit ->
+#: objection_or_signal -> out_value_reframe. Four inferences, one per branch node.
 HAPPY_SCRIPT = [
     picks("pricing_question", pricing_focus="plan_cost"),
+    picks("plan_cost_question", cost_frame="per_seat"),
     picks("pro_tier", tier_signal="team_size"),
     picks("budget_objection", objection_strength="hard"),
 ]
@@ -101,6 +103,7 @@ def test_reads_every_event_in_arrival_order(happy: dict[str, Any]) -> None:
         "step",
         "step",
         "step",
+        "step",
         "completed",
         "done",
     ]
@@ -110,21 +113,23 @@ def test_reads_every_event_in_arrival_order(happy: dict[str, Any]) -> None:
 def test_lights_each_step_node_and_the_edges_between_them(happy: dict[str, Any]) -> None:
     # The leaf has no step of its own: it lights on `completed`, last, along with the
     # edge into it.
-    assert happy["nodes"] == {
-        "intent": "visited",
-        "product_interest": "visited",
-        "signal_check": "visited",
-        "rec_graceful_exit": "idle",
-        "rec_budget": "visited",
-        "rec_timing": "idle",
-        "rec_competitor": "idle",
-        "rec_advance": "idle",
+    visited = {node for node, state in happy["nodes"].items() if state == "visited"}
+    assert visited == {
+        "intent",
+        "pricing_focus",
+        "tier_fit",
+        "objection_or_signal",
+        "out_value_reframe",
     }
+    # Every other node in the 26-node tree is untouched.
+    assert set(happy["nodes"].values()) == {"visited", "idle"}
+
     lit = {key for key, state in happy["edges"].items() if state == "visited"}
     assert lit == {
-        "intent->product_interest",
-        "product_interest->signal_check",
-        "signal_check->rec_budget",
+        "intent->pricing_focus",
+        "pricing_focus->tier_fit",
+        "tier_fit->objection_or_signal",
+        "objection_or_signal->out_value_reframe",
     }
 
 
@@ -136,25 +141,28 @@ def test_lit_node_shows_option_argument_and_latency(happy: dict[str, Any]) -> No
     assert latency.endswith(" ms")
     # Only the visited nodes carry detail; everything else is still blank.
     annotated = {node for node, lines in happy["details"].items() if lines}
-    assert annotated == {"intent", "product_interest", "signal_check"}
+    assert annotated == {"intent", "pricing_focus", "tier_fit", "objection_or_signal"}
 
 
 @requires_node
 def test_one_trace_card_per_step_with_the_prd_shape(happy: dict[str, Any]) -> None:
     cards = happy["cards"]
-    assert [card["index"] for card in cards] == ["0", "1", "2"]
+    assert [card["index"] for card in cards] == ["0", "1", "2", "3"]
     assert [card["node"] for card in cards] == [
         "Customer intent",
-        "Product interest",
+        "Pricing concern",
+        "Tier fit",
         "Objection or buying signal",
     ]
     assert [card["option"] for card in cards] == [
         "Pricing question",
+        "Plan cost question",
         "Pro tier",
         "Budget objection",
     ]
     assert [card["args"] for card in cards] == [
         ["pricing_focus: plan_cost"],
+        ["cost_frame: per_seat"],
         ["tier_signal: team_size"],
         ["objection_strength: hard"],
     ]
@@ -207,7 +215,15 @@ def test_frame_boundaries_may_land_anywhere_in_a_chunk(
 
 @requires_node
 def test_decoder_handles_one_character_at_a_time(happy: dict[str, Any]) -> None:
-    assert happy["decoder"] == ["started", "step", "step", "step", "completed", "done"]
+    assert happy["decoder"] == [
+        "started",
+        "step",
+        "step",
+        "step",
+        "step",
+        "completed",
+        "done",
+    ]
 
 
 @requires_node
@@ -235,8 +251,8 @@ def test_unplaced_mid_tree_keeps_earlier_nodes_lit(tmp_path: Path) -> None:
     body = analyze([HAPPY_SCRIPT[0], EMPTY_RESPONSE])
     result = run_harness(body, tmp_path)
     assert result["nodes"]["intent"] == "visited"
-    assert result["nodes"]["product_interest"] == "warning"
-    assert result["edges"]["intent->product_interest"] == "visited"
+    assert result["nodes"]["pricing_focus"] == "warning"
+    assert result["edges"]["intent->pricing_focus"] == "visited"
     assert len(result["cards"]) == 1
 
 
@@ -294,24 +310,25 @@ def test_step_detail_formats_the_latency_as_an_integer(happy: dict[str, Any]) ->
 
 
 @requires_node
-def test_result_card_shows_the_leaf_recommendation_and_rationale(
-    happy: dict[str, Any], happy_body: str
-) -> None:
+def test_completed_result_is_labelled_with_the_leaf_it_reached(happy: dict[str, Any]) -> None:
     (completed,) = [data for name, data in happy["frames"] if name == "completed"]
     card = happy["result"]
     assert card["state"] == "completed"
     assert card["label"] == completed["label"]
-    assert card["recommendation"] == completed["recommendation"]
-    # The rationale is the smaller "why" line beneath the recommendation.
-    assert card["rationale"] == completed["rationale"]
-    assert card["rationale"] and card["rationale"] != card["recommendation"]
 
 
 @requires_node
 def test_result_card_breadcrumb_names_the_chosen_options(happy: dict[str, Any]) -> None:
     # Option labels, not node labels: the breadcrumb reads as the conversation.
-    assert happy["picks"] == ["pricing_question", "pro_tier", "budget_objection"]
-    assert happy["result"]["path"] == "Pricing question → Pro tier → Budget objection"
+    assert happy["picks"] == [
+        "pricing_question",
+        "plan_cost_question",
+        "pro_tier",
+        "budget_objection",
+    ]
+    assert happy["result"]["path"] == (
+        "Pricing question → Plan cost question → Pro tier → Budget objection"
+    )
 
 
 @requires_node
@@ -330,6 +347,7 @@ def test_result_card_renders_only_after_the_terminal_event(happy: dict[str, Any]
     # Empty through `started` and every `step`; a card only once `completed` arrives.
     assert happy["resultStates"] == [
         ["started", "empty"],
+        ["step", "empty"],
         ["step", "empty"],
         ["step", "empty"],
         ["step", "empty"],
@@ -371,7 +389,7 @@ def test_unplaced_card_keeps_the_breadcrumb_reached_so_far(tmp_path: Path) -> No
     card = result["result"]
     assert card["state"] == "unplaced"
     assert card["path"] == "Pricing question"
-    assert "Product interest" in card["reason"]
+    assert "Pricing concern" in card["reason"]
     assert "no answer" in card["reason"]
     assert card["recommendation"] is None
 
@@ -389,7 +407,7 @@ def test_every_backend_stop_reason_has_plain_language(happy: dict[str, Any]) -> 
     """The four reasons the UI explains are exactly the four the backend can send."""
     assert set(happy["stopReasons"]) == set(get_args(StopReason))
     for reason, sentence in happy["reasonText"].items():
-        assert sentence.startswith("Stopped at “Product interest”: ")
+        assert sentence.startswith("Stopped at “Pricing concern”: ")
         assert reason != "something_new" or "something_new" in sentence
     # An unknown code still reads as a sentence rather than "undefined".
     assert "undefined" not in happy["reasonText"]["something_new"]

@@ -73,10 +73,11 @@ def test_every_configured_node_is_drawn_exactly_once(
 @requires_node
 def test_levels_run_top_to_bottom_from_the_root(layout: dict[str, Any]) -> None:
     assert node(layout, "intent")["level"] == 0
-    assert node(layout, "product_interest")["level"] == 1
-    assert node(layout, "signal_check")["level"] == 2
-    assert node(layout, "rec_budget")["level"] == 3
-    assert layout["levels"] == 4
+    assert node(layout, "pricing_focus")["level"] == 1
+    assert node(layout, "tier_fit")["level"] == 2
+    assert node(layout, "objection_or_signal")["level"] == 3
+    assert node(layout, "out_value_reframe")["level"] == 4
+    assert layout["levels"] == 5
 
     for n in layout["nodes"]:
         other = [m for m in layout["nodes"] if m["level"] == n["level"] + 1]
@@ -87,12 +88,12 @@ def test_levels_run_top_to_bottom_from_the_root(layout: dict[str, Any]) -> None:
 def test_the_non_uniform_short_circuit_leaf_sits_at_its_own_level(
     layout: dict[str, Any],
 ) -> None:
-    """rec_graceful_exit is a level-2 leaf whose siblings' subtrees reach level 4."""
-    exit_leaf = node(layout, "rec_graceful_exit")
+    """out_graceful_exit is a level-2 leaf whose siblings' subtrees reach level 5."""
+    exit_leaf = node(layout, "out_graceful_exit")
 
     assert exit_leaf["leaf"] is True
-    assert exit_leaf["level"] == node(layout, "product_interest")["level"]
-    assert exit_leaf["x"] != node(layout, "product_interest")["x"]
+    assert exit_leaf["level"] == node(layout, "pricing_focus")["level"]
+    assert exit_leaf["x"] != node(layout, "pricing_focus")["x"]
 
 
 @requires_node
@@ -115,13 +116,17 @@ def test_labels_come_from_the_config(layout: dict[str, Any], config: dict[str, A
 def test_one_edge_per_node_pair_carrying_the_options_that_share_it(
     layout: dict[str, Any],
 ) -> None:
-    """Two level-1 options lead to product_interest; that is one edge, not two."""
+    """Three of feature_fit's options lead to tier_fit; that is one edge, not three."""
     assert len(layout["edgeKeys"]) == len(set(layout["edgeKeys"]))
 
-    (shared,) = [e for e in layout["edges"] if e["key"] == "intent->product_interest"]
-    assert shared["options"] == ["pricing_question", "feature_question"]
+    (shared,) = [e for e in layout["edges"] if e["key"] == "feature_fit->tier_fit"]
+    assert shared["options"] == [
+        "dashboards_and_reporting",
+        "integrations_and_api",
+        "data_export",
+    ]
 
-    (exit_edge,) = [e for e in layout["edges"] if e["to"] == "rec_graceful_exit"]
+    (exit_edge,) = [e for e in layout["edges"] if e["to"] == "out_graceful_exit"]
     assert exit_edge["options"] == ["not_interested"]
 
 
@@ -154,13 +159,13 @@ def test_editing_a_label_changes_the_drawing_with_no_code_edit(
     layout: dict[str, Any], config: dict[str, Any], tmp_path: Path
 ) -> None:
     edited = json.loads(json.dumps(config))
-    edited["nodes"]["signal_check"]["label"] = "Renamed by the operator"
+    edited["nodes"]["objection_or_signal"]["label"] = "Renamed by the operator"
     path = tmp_path / "tree.json"
     path.write_text(json.dumps(edited))
 
     after = run_harness(path)
 
-    assert node(after, "signal_check")["label"] == "Renamed by the operator"
+    assert node(after, "objection_or_signal")["label"] == "Renamed by the operator"
     # Only the text changed: the geometry is a function of the graph's shape.
     assert [n["x"] for n in after["nodes"]] == [n["x"] for n in layout["nodes"]]
     assert (after["width"], after["height"]) == (layout["width"], layout["height"])
@@ -170,18 +175,18 @@ def test_editing_a_label_changes_the_drawing_with_no_code_edit(
 def test_layout_follows_a_restructured_tree(config: dict[str, Any], tmp_path: Path) -> None:
     """No hardcoded coordinates: a new level has to push the drawing taller."""
     edited = json.loads(json.dumps(config))
-    edited["nodes"]["rec_budget"] = {
-        "id": "rec_budget",
+    edited["nodes"]["out_value_reframe"] = {
+        "id": "out_value_reframe",
         "type": "branch",
         "label": "Budget follow-up",
-        "level": 4,
+        "level": 5,
         "prompt_hint": "Who holds the budget?",
         "options": [
             {
                 "tool_name": "needs_champion",
                 "description": "They need someone internal to carry it.",
                 "argument": {"name": "who", "enum": ["manager", "finance"], "description": "Who."},
-                "next": "rec_timing",
+                "next": "out_timing_followup",
             }
         ],
     }
@@ -190,11 +195,14 @@ def test_layout_follows_a_restructured_tree(config: dict[str, Any], tmp_path: Pa
 
     after = run_harness(path)
 
-    assert node(after, "rec_budget")["leaf"] is False
-    # rec_timing now has a second, deeper parent, so it drops below rec_budget.
-    assert node(after, "rec_timing")["level"] == node(after, "rec_budget")["level"] + 1
-    assert after["levels"] == 5
-    assert "rec_budget->rec_timing" in after["edgeKeys"]
+    assert node(after, "out_value_reframe")["leaf"] is False
+    # out_timing_followup now has a deeper parent, so it drops below out_value_reframe.
+    assert (
+        node(after, "out_timing_followup")["level"]
+        == node(after, "out_value_reframe")["level"] + 1
+    )
+    assert after["levels"] == 6
+    assert "out_value_reframe->out_timing_followup" in after["edgeKeys"]
 
 
 @requires_node
@@ -241,7 +249,7 @@ def test_leaves_are_drawn_as_a_distinct_shape(drawn: dict[str, Any]) -> None:
 @requires_node
 def test_drawing_labels_every_node_and_the_svg_itself(drawn: dict[str, Any]) -> None:
     assert all(n["lines"] and all(n["lines"]) for n in drawn["nodes"])
-    assert drawn["ariaLabel"] == "Decision tree northbeam-saas-v1"
+    assert drawn["ariaLabel"] == "Decision tree northbeam-saas-v2"
     # A viewBox rather than pixel sizes: the column scales the drawing.
     assert drawn["viewBox"].startswith("0 0 ")
 

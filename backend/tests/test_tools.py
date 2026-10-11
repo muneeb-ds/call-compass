@@ -1,6 +1,6 @@
 """Tests for node-to-tools conversion.
 
-The exact-shape assertions on `intent` and `signal_check` are intentional: they pin the
+The exact-shape assertions on `intent` and `objection_or_signal` are intentional: they pin the
 schema the model is given, so an accidental change to the tool format fails loudly here
 rather than silently degrading inference quality.
 """
@@ -59,6 +59,59 @@ def test_root_node_tool_list_exact_shape() -> None:
             },
         },
         {
+            "name": "competitor_mention",
+            "description": (
+                "The customer names another vendor or an alternative tool they use or are weighing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mention_context": {
+                        "type": "string",
+                        "enum": ["currently_using", "comparing", "under_contract"],
+                        "description": "How the other tool came up.",
+                    }
+                },
+                "required": ["mention_context"],
+            },
+        },
+        {
+            "name": "existing_account",
+            "description": (
+                "The speaker is already a customer, talking about the account they have "
+                "rather than buying a new one."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_topic": {
+                        "type": "string",
+                        "enum": ["more_seats", "renewal", "not_working"],
+                        "description": "What they raised about their existing account.",
+                    }
+                },
+                "required": ["account_topic"],
+            },
+        },
+        {
+            "name": "buying_signal",
+            "description": (
+                "The customer is moving forward: asking about next steps, trials, demos, "
+                "or paperwork."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "readiness": {
+                        "type": "string",
+                        "enum": ["wants_trial", "wants_demo", "ready_to_buy"],
+                        "description": "How ready they are to proceed.",
+                    }
+                },
+                "required": ["readiness"],
+            },
+        },
+        {
             "name": "not_interested",
             "description": (
                 "The customer is declining, deflecting, or asking to be left alone."
@@ -84,13 +137,13 @@ def test_root_node_tool_list_exact_shape() -> None:
 
 
 def test_mid_tree_node_tool_list_exact_shape() -> None:
-    tools = node_to_tools(sample_tree().branch("signal_check"))
+    tools = node_to_tools(sample_tree().branch("objection_or_signal"))
 
     assert [tool["name"] for tool in tools] == [
         "budget_objection",
         "timing_objection",
         "competitor_objection",
-        "buying_signal",
+        "ready_to_proceed",
         NONE_OF_THESE,
     ]
     assert tools[0] == {
@@ -127,7 +180,7 @@ def test_none_of_these_present_for_every_branch_node() -> None:
 
 
 def test_tool_list_covers_exactly_the_nodes_options() -> None:
-    for node_id in ("intent", "product_interest", "signal_check"):
+    for node_id in ("intent", "pricing_focus", "tier_fit", "objection_or_signal"):
         node = sample_tree().branch(node_id)
         names = [tool["name"] for tool in node_to_tools(node)]
         assert names == [option.tool_name for option in node.options] + [NONE_OF_THESE]
@@ -175,6 +228,9 @@ def test_shape_is_understood_by_neudecides_own_grammar_helper() -> None:
     assert tool_parameters(node_to_tools(node)) == {
         "pricing_question": ["pricing_focus"],
         "feature_question": ["feature_area"],
+        "competitor_mention": ["mention_context"],
+        "existing_account": ["account_topic"],
+        "buying_signal": ["readiness"],
         "not_interested": ["decline_tone"],
         NONE_OF_THESE: [],
     }

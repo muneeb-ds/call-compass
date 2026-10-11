@@ -29,8 +29,8 @@ def test_health_reports_model_and_tree() -> None:
         "status": "ok",
         "model_loaded": True,
         "model_load_ms": 412,
-        "tree_id": "northbeam-saas-v1",
-        "node_count": 8,
+        "tree_id": "northbeam-saas-v2",
+        "node_count": 26,
     }
 
 
@@ -54,7 +54,7 @@ def test_engine_and_tree_live_on_app_state() -> None:
     application = create_app(model_loader=lambda: engine)
     with TestClient(application):
         assert application.state.engine is engine
-        assert application.state.tree.tree_id == "northbeam-saas-v1"
+        assert application.state.tree.tree_id == "northbeam-saas-v2"
 
 
 def test_invalid_tree_fails_startup_with_single_line_error(tmp_path: Path) -> None:
@@ -151,7 +151,7 @@ def test_static_mount_does_not_shadow_the_api() -> None:
     """The mount sits at `/`, so guard the ordering that keeps `/api/*` reachable."""
     with TestClient(create_app(model_loader=fake_engine)) as client:
         assert client.get("/api/health").json()["status"] == "ok"
-        assert client.get("/api/tree").json()["tree_id"] == "northbeam-saas-v1"
+        assert client.get("/api/tree").json()["tree_id"] == "northbeam-saas-v2"
 
 
 def test_frontend_dir_contains_the_shell() -> None:

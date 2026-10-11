@@ -88,11 +88,14 @@ class BranchNode(_NodeBase):
 
 
 class LeafNode(_NodeBase):
-    """A terminal node carrying the recommendation the agent should say."""
+    """A terminal node: the classification outcome a traversal landed on.
+
+    It carries a `label` and nothing else. A leaf is deliberately *not* a place to
+    put advice for the operator to read out — `extra="forbid"` on `_Strict` means a
+    config still declaring `recommendation` or `rationale` is a startup error.
+    """
 
     type: Literal["leaf"]
-    recommendation: str = Field(min_length=1)
-    rationale: str | None = None
 
 
 Node = Annotated[BranchNode | LeafNode, Field(discriminator="type")]

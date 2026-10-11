@@ -103,8 +103,8 @@ def create_app(
     async def get_tree() -> dict[str, Any]:
         """The validated tree config, verbatim, for the static visualization.
 
-        `exclude_none` keeps optional fields (`prompt_hint`, `rationale`) absent when
-        the config omits them, so the response round-trips to the file's own JSON.
+        `exclude_none` keeps optional fields (`prompt_hint`) absent when the config
+        omits them, so the response round-trips to the file's own JSON.
         """
         tree: Tree = app.state.tree
         return tree.model_dump(exclude_none=True)

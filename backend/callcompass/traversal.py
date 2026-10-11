@@ -49,8 +49,6 @@ class Completed(BaseModel):
     event: Literal["completed"] = "completed"
     leaf_node_id: str
     label: str
-    recommendation: str
-    rationale: str | None
     path: list[str]
     inference_count: int
     total_inference_ms: int
@@ -149,8 +147,6 @@ def traverse(
             yield Completed(
                 leaf_node_id=node.id,
                 label=node.label,
-                recommendation=node.recommendation,
-                rationale=node.rationale,
                 path=list(path),
                 inference_count=inference_count,
                 total_inference_ms=round(total_inference_ms),

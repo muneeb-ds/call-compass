@@ -100,22 +100,37 @@ Use `http://127.0.0.1:8000`, not a LAN IP: `getUserMedia` requires a secure cont
 Record yourself as the **customer**, one sentence, then stop. Each utterance below was verified
 end to end against the real model on this repo's `config/tree.json`.
 
-The tree asks three questions of one sentence — intent, then tier, then objection — so an
-utterance that carries only an intent (`"what does Pro cost?"`) will legitimately stop early at
-"Couldn't place this". **The utterances that demo well carry all three signals**, which is what
+The tree branches six ways at the root and runs up to **four** inferences deep, so different
+utterances take visibly different routes — that is the point of the shape. A route is only as
+long as the utterance has signal for: an utterance carrying only an intent
+(`"what does Pro cost?"`) will legitimately stop early at "Couldn't place this".
+**The utterances that demo well carry one signal per question on their route**, which is what
 the examples below do.
 
-| Say this | Path | Lands on |
-| --- | --- | --- |
-| "What does the Pro tier cost? We're a scaling team but there's no budget this quarter." | pricing → Pro → budget | **Reframe on value** |
-| "Does it do dashboards for my scaling team? We're interested but mid-project right now." | feature → Pro → timing | **Secure a dated follow-up** |
-| "How much is the Pro plan? My team is growing and we're evaluating you against Looker." | pricing → Pro → competitor | **Differentiate, do not attack** |
-| "Do you have integrations for my growing team? I'm ready to buy, how do we start a trial?" | feature → Pro → buying signal | **Advance to next step now** |
-| "I'm really not interested, please don't call here again." | not interested | **Exit cleanly** (1 inference) |
-| "What's the price per seat? We're a large org and security review and SSO are required, and no budget this quarter." | pricing → Enterprise → budget | **Reframe on value** |
+Every node asks another question of the *same* one sentence, so the deepest routes need the
+most densely loaded utterances. That is the real ceiling on tree depth here — not latency.
 
-That covers all three level-1 branches (`pricing_question`, `feature_question`,
-`not_interested`) and every leaf in the sample tree.
+| Say this | Route | Inferences | Lands on |
+| --- | --- | --- | --- |
+| "What does the Pro tier cost per seat? We're a scaling team, but there's no budget this quarter." | pricing → plan cost → Pro → budget | 4 | **Budget objection** |
+| "What's the price per seat? We're a large org and we'll need a security review and SSO first." | pricing → plan cost → Enterprise → security | 4 | **Security review required** |
+| "Does it do dashboards for my scaling team? We're interested, but we're mid-project right now." | feature → dashboards → Pro → timing | 4 | **Timing objection** |
+| "Can you do anything on the price? I'd need my finance team to sign off anyway." | pricing → discount → approval | 3 | **Approval needed** |
+| "How does invoicing work — can we pay annually instead of monthly?" | pricing → billing terms | 2 | **Billing terms question** |
+| "We already use Looker for all of this and it works fine." | competitor → incumbent | 2 | **Incumbent in place** |
+| "We've been paying all year and barely anyone on my team logs in. I'm not sure we'll renew." | existing account → renewal risk | 2 | **Renewal at risk** |
+| "This looks great — how do I get a trial going with my own data?" | buying signal → trial | 2 | **Trial requested** |
+| "Do you handle payroll and benefits?" | feature → unsupported | 2 | **Capability gap** |
+| "I'm really not interested, please don't call here again." | not interested | 1 | **Not interested** |
+
+That covers all six level-1 branches (`pricing_question`, `feature_question`,
+`competitor_mention`, `existing_account`, `buying_signal`, `not_interested`) and routes of every
+available length, 1 through 4.
+
+> **These utterances have not yet been re-verified against the real model.** The tree was
+> widened from 8 nodes to 26 after the figures below were taken; the routes above are what the
+> *config* dictates, not what a run was observed to do. Re-run them before demoing, and expect
+> the four-inference routes to be the fragile ones — they ask four questions of one sentence.
 
 ### The honest-failure utterance
 
@@ -166,6 +181,12 @@ The spread is dominated by **how many inferences a path needs**, not by jitter. 
 - the level-2 short circuit (`not_interested`) and a root-level decline, 1 inference each:
   median **67 ms** (range 50–100 ms)
 
+**These figures predate the wider tree** (`northbeam-saas-v1`, 8 nodes, 3 inferences at most).
+The deepest route in `northbeam-saas-v2` is **4** inferences, so on the same hardware expect
+roughly one more ~80 ms call on the longest routes — ~320–360 ms, still comfortably inside the
+one-second budget. Nothing about per-call cost changed; only the number of calls did. Re-run
+`scripts/bench_latency.py` to replace this paragraph with measured numbers.
+
 **Caveat on the p95, worth reading before quoting it.** The measurement machine was a normal
 laptop with other applications running (load average ~4–6, one background process holding a
 core), not a quiesced benchmark host. Across the four repeats the median was stable at
@@ -202,8 +223,8 @@ coordinates to update.
 
 ```jsonc
 {
-  "tree_id": "northbeam-saas-v1",   // required, non-empty
-  "version": "1.0.0",               // required, non-empty
+  "tree_id": "northbeam-saas-v2",   // required, non-empty
+  "version": "2.0.0",               // required, non-empty
   "product": "Northbeam Analytics", // required, non-empty
   "root": "intent",                 // required; must be a key in "nodes"
   "nodes": {                        // required, at least one node
@@ -222,17 +243,17 @@ coordinates to update.
             "enum": ["plan_cost", "billing_terms", "discount"],  // non-empty
             "description": "Which aspect of pricing was raised."
           },
-          "next": "product_interest"        // must be a key in "nodes"
+          "next": "pricing_focus"           // must be a key in "nodes"
         }
       ]
     },
-    "rec_budget": {
-      "id": "rec_budget",
+    "out_value_reframe": {
+      "id": "out_value_reframe",
       "type": "leaf",
-      "label": "Reframe on value",
-      "level": 4,
-      "recommendation": "Acknowledge the budget constraint, then ...",  // required
-      "rationale": "Optional smaller text under the recommendation."    // optional
+      "label": "Budget objection",      // the outcome, as a classification
+      "level": 5,
+      "recommendation": "Move from price to cost of delay, and ...",  // required
+      "rationale": "Optional smaller text under the recommendation."  // optional
     }
   }
 }
@@ -262,11 +283,12 @@ rather than misbehaving at inference time. Rejected:
 
 ### Things worth knowing
 
-- **The tree need not be uniform depth.** In the sample tree `rec_graceful_exit` is a level-2
-  leaf reached after a single inference, while its siblings' subtrees run to level 4.
-- **It is a DAG, not strictly a tree.** `pricing_question` and `feature_question` both point at
-  `product_interest`. Sharing a `next` is supported; a node's rendered depth is its *longest*
-  path from the root, so every edge still points downward.
+- **The tree need not be uniform depth.** In the sample tree `out_graceful_exit` is a level-2
+  leaf reached after a single inference, while its siblings' subtrees run to level 5.
+- **It is a DAG, not strictly a tree.** `feature_fit`'s three capability options all point at
+  `tier_fit`, and `tier_fit` itself has four distinct parents. Sharing a `next` is supported: it
+  draws one node and one edge per *node pair*, and a node's rendered depth is its *longest* path
+  from the root, so every edge still points downward.
 - **`level` is documentation only.** Layout and traversal both compute depth from the edges. It
   is validated as an integer `>= 1` and otherwise ignored, so do not rely on it.
 - Each node's options are the **only** tools offered at that node. The model never sees another

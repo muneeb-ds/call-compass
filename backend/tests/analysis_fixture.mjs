@@ -248,7 +248,7 @@ process.stdout.write(
     reasonText: Object.fromEntries(
       [...Object.keys(STOP_REASONS), "something_new"].map((reason) => [
         reason,
-        reasonText(reason, "Product interest"),
+        reasonText(reason, "Pricing concern"),
       ]),
     ),
     stepDetail: stepDetail({

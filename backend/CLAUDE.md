@@ -38,7 +38,11 @@ cd backend
   typo'd field is an error rather than silently ignored.
 - `NONE_OF_THESE = "none_of_these"` lives here and is **backend-injected at inference time**;
   the loader rejects any config that declares it. US-004's tool conversion must add it.
-- The sample tree is **not uniform depth** (`rec_graceful_exit` is a level-2 leaf). Anything
+- A **leaf carries only `label`** (plus the shared `level` / optional `prompt_hint`). It is a
+  classification outcome, not advice: `recommendation` and `rationale` were removed in v2, and
+  because every model is `extra="forbid"`, a stale config declaring either fails at startup
+  with a `TreeConfigError` naming the node. `Completed` in `traversal.py` mirrors this.
+- The sample tree is **not uniform depth** (`out_graceful_exit` is a level-2 leaf). Anything
   that walks or lays out the tree must handle varying depth.
 - Duplicate node ids are caught by a `json.loads` `object_pairs_hook` — a plain dict would
   silently dedupe them, so parse config text through `parse_tree`, not `json.loads`.

@@ -37,8 +37,11 @@ def steps(events: list[TraversalEvent]) -> list[Step]:
     return [event for event in events if isinstance(event, Step)]
 
 
+#: The deepest route the sample tree offers: four inferences, one per branch node.
+#: intent -> pricing_focus -> tier_fit -> objection_or_signal -> out_value_reframe.
 HAPPY_PATH = [
     picks("pricing_question", pricing_focus="plan_cost"),
+    picks("plan_cost_question", cost_frame="per_seat"),
     picks("pro_tier", growth_signal="scaling_team"),
     picks("budget_objection", budget_blocker="too_expensive"),
 ]
@@ -47,31 +50,36 @@ HAPPY_PATH = [
 def test_happy_path_reaches_a_leaf(tree: Tree) -> None:
     events, _ = run(tree, HAPPY_PATH)
 
-    assert [event.event for event in events] == ["step", "step", "step", "completed"]
+    assert [event.event for event in events] == ["step", "step", "step", "step", "completed"]
 
     assert [(step.node_id, step.tool_called, step.next_node_id) for step in steps(events)] == [
-        ("intent", "pricing_question", "product_interest"),
-        ("product_interest", "pro_tier", "signal_check"),
-        ("signal_check", "budget_objection", "rec_budget"),
+        ("intent", "pricing_question", "pricing_focus"),
+        ("pricing_focus", "plan_cost_question", "tier_fit"),
+        ("tier_fit", "pro_tier", "objection_or_signal"),
+        ("objection_or_signal", "budget_objection", "out_value_reframe"),
     ]
-    assert [step.index for step in steps(events)] == [0, 1, 2]
+    assert [step.index for step in steps(events)] == [0, 1, 2, 3]
     assert steps(events)[0].node_label == "Customer intent"
-    assert steps(events)[1].arguments == {"growth_signal": "scaling_team"}
+    assert steps(events)[2].arguments == {"growth_signal": "scaling_team"}
 
     completed = events[-1]
     assert isinstance(completed, Completed)
-    assert completed.leaf_node_id == "rec_budget"
-    assert completed.label == "Reframe on value"
-    assert completed.recommendation == tree.nodes["rec_budget"].recommendation  # type: ignore[union-attr]
-    assert completed.rationale is not None
-    assert completed.path == ["intent", "product_interest", "signal_check", "rec_budget"]
-    assert completed.inference_count == 3
+    assert completed.leaf_node_id == "out_value_reframe"
+    assert completed.label == "Budget objection"
+    assert completed.path == [
+        "intent",
+        "pricing_focus",
+        "tier_fit",
+        "objection_or_signal",
+        "out_value_reframe",
+    ]
+    assert completed.inference_count == 4
 
 
 def test_same_audio_buffer_is_passed_at_every_node(tree: Tree) -> None:
     _, model = run(tree, HAPPY_PATH)
 
-    assert len(model.calls) == 3
+    assert len(model.calls) == 4
     for audio, _tools in model.calls:
         assert audio is AUDIO
 
@@ -83,10 +91,13 @@ def test_each_node_sees_only_its_own_tools(tree: Tree) -> None:
     assert names[0] == [
         "pricing_question",
         "feature_question",
+        "competitor_mention",
+        "existing_account",
+        "buying_signal",
         "not_interested",
         "none_of_these",
     ]
-    assert names[1] == ["starter_tier", "pro_tier", "enterprise_tier", "none_of_these"]
+    assert names[2] == ["starter_tier", "pro_tier", "enterprise_tier", "none_of_these"]
     assert all("none_of_these" in group for group in names)
 
 
@@ -97,8 +108,8 @@ def test_level_two_short_circuit_via_not_interested(tree: Tree) -> None:
     assert [event.event for event in events] == ["step", "completed"]
     completed = events[-1]
     assert isinstance(completed, Completed)
-    assert completed.leaf_node_id == "rec_graceful_exit"
-    assert completed.path == ["intent", "rec_graceful_exit"]
+    assert completed.leaf_node_id == "out_graceful_exit"
+    assert completed.path == ["intent", "out_graceful_exit"]
     assert completed.inference_count == 1
     assert len(model.calls) == 1
 
@@ -125,8 +136,8 @@ def test_empty_response_mid_tree_is_unplaced(tree: Tree) -> None:
     unplaced = events[-1]
     assert isinstance(unplaced, Unplaced)
     assert unplaced.reason == "empty_response"
-    assert unplaced.stopped_at_node_id == "product_interest"
-    assert unplaced.path == ["intent", "product_interest"]
+    assert unplaced.stopped_at_node_id == "pricing_focus"
+    assert unplaced.path == ["intent", "pricing_focus"]
     assert unplaced.inference_count == 2
 
 
@@ -156,7 +167,7 @@ def test_depth_limit_stops_traversal(tree: Tree) -> None:
     unplaced = events[-1]
     assert isinstance(unplaced, Unplaced)
     assert unplaced.reason == "depth_limit"
-    assert unplaced.stopped_at_node_id == "signal_check"
+    assert unplaced.stopped_at_node_id == "tier_fit"
     assert unplaced.inference_count == 2
     # The capped call is never made.
     assert len(model.calls) == 2

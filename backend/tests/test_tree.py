@@ -79,15 +79,12 @@ def _valid_config() -> dict[str, Any]:
                 "type": "leaf",
                 "label": "Reframe on value",
                 "level": 3,
-                "recommendation": "Move from price to cost-of-delay.",
-                "rationale": "Budget objections are about unproven value.",
             },
             "rec_exit": {
                 "id": "rec_exit",
                 "type": "leaf",
                 "label": "Exit cleanly",
                 "level": 2,
-                "recommendation": "Thank them and close without pressure.",
             },
         },
     }
@@ -117,7 +114,8 @@ def test_valid_tree_parses() -> None:
 
     exit_leaf = tree.nodes["rec_exit"]
     assert isinstance(exit_leaf, LeafNode)
-    assert exit_leaf.rationale is None  # rationale is optional
+    # A leaf is a pure classification outcome: a label, and no operator-facing text.
+    assert exit_leaf.prompt_hint is None
 
 
 def test_non_uniform_depth_is_allowed() -> None:
@@ -154,8 +152,8 @@ def test_rejects_missing_next_pointer() -> None:
 def test_rejects_duplicate_node_id() -> None:
     # Duplicate keys must be caught during JSON decoding; a dict would silently dedupe.
     raw = json.dumps(_valid_config())
-    duplicate = '"signal": {"id": "signal", "type": "leaf", "label": "Dup", "level": 9,'
-    duplicate += ' "recommendation": "Dup."}, "signal":'
+    duplicate = '"signal": {"id": "signal", "type": "leaf", "label": "Dup",'
+    duplicate += ' "level": 9}, "signal":'
     raw = raw.replace('"signal":', duplicate, 1)
 
     with pytest.raises(TreeConfigError) as excinfo:
@@ -204,14 +202,32 @@ def test_rejects_root_absent_from_nodes() -> None:
         _parse(config)
 
 
-def test_rejects_leaf_without_recommendation() -> None:
+def test_rejects_leaf_carrying_a_recommendation() -> None:
+    """A stale pre-v2 config is a startup error, not a silently ignored field.
+
+    No explicit check is needed for this: `extra="forbid"` on `_Strict` catches it,
+    and `_single_line` names the node from Pydantic's `loc`.
+    """
     config = _valid_config()
-    del config["nodes"]["rec_exit"]["recommendation"]
+    config["nodes"]["rec_exit"]["recommendation"] = "Thank them and close."
 
     with pytest.raises(TreeConfigError) as excinfo:
         _parse(config)
 
-    assert "rec_exit" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "rec_exit" in message
+    assert "recommendation" in message
+    assert "\n" not in message
+
+
+def test_rejects_leaf_carrying_a_rationale() -> None:
+    config = _valid_config()
+    config["nodes"]["rec_budget"]["rationale"] = "Because of unproven value."
+
+    with pytest.raises(TreeConfigError) as excinfo:
+        _parse(config)
+
+    assert "rec_budget" in str(excinfo.value)
 
 
 def test_rejects_duplicate_tool_name_within_one_node() -> None:
@@ -276,24 +292,24 @@ def test_load_tree_reports_a_missing_file(tmp_path: Path) -> None:
 def test_sample_tree_loads_and_matches_the_prd() -> None:
     tree = load_tree(default_config_path())
 
-    assert tree.tree_id == "northbeam-saas-v1"
+    assert tree.tree_id == "northbeam-saas-v2"
     assert tree.root == "intent"
-    assert tree.node_count == 8
+    assert tree.node_count == 26
 
-    # The level-2 short-circuit leaf: not_interested skips straight to a recommendation.
-    graceful_exit = tree.nodes["rec_graceful_exit"]
+    # The level-2 short-circuit leaf: not_interested skips straight to an outcome.
+    graceful_exit = tree.nodes["out_graceful_exit"]
     assert isinstance(graceful_exit, LeafNode)
     assert graceful_exit.level == 2
 
     intent = tree.branch("intent")
     not_interested = next(o for o in intent.options if o.tool_name == "not_interested")
-    assert not_interested.next == "rec_graceful_exit"
+    assert not_interested.next == "out_graceful_exit"
 
-    assert [o.tool_name for o in tree.branch("signal_check").options] == [
+    assert [o.tool_name for o in tree.branch("objection_or_signal").options] == [
         "budget_objection",
         "timing_objection",
         "competitor_objection",
-        "buying_signal",
+        "ready_to_proceed",
     ]
 
 
