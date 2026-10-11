@@ -48,6 +48,9 @@ function describe(err) {
  * @typedef {object} Recording
  * @property {Uint8Array} bytes the complete WAV file
  * @property {Blob} blob the same bytes, for playback
+ * @property {Float32Array} samples the same audio, decoded, for US-029's static waveform —
+ *   drawing from these instead of re-decoding `bytes` keeps the waveform byte-identical to
+ *   what was actually captured
  * @property {number} durationMs
  * @property {number} sampleRate always 16000
  * @property {Array<{startMs: number, endMs: number}>} segments one entry per
@@ -208,6 +211,7 @@ export class Recorder {
     return {
       bytes,
       blob: new Blob([bytes], { type: "audio/wav" }),
+      samples,
       durationMs: Math.round((samples.length / SAMPLE_RATE) * 1000),
       sampleRate: SAMPLE_RATE,
       segments: deriveSegments(this.rawSegments, samples.length, SAMPLE_RATE),

@@ -201,6 +201,9 @@ export function wireCapture(hooks = {}) {
     recording = await recorder.stop();
     settle();
     if (!recording) return;
+    // Replaces the flat idle baseline `settle()` just drew with the actual take, so the
+    // canvas does not go blank the moment recording ends.
+    waveform.renderRecording(recording.samples, recording.segments);
     playback.load(recording);
     setCaptureMessage(
       `Captured ${(recording.durationMs / 1000).toFixed(1)}s · ` +

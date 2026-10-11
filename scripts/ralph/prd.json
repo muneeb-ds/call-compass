@@ -290,7 +290,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-029. Depends on US-012's segments. waveform.js is currently live-only and settles to a flat baseline on stop(); this story gives it a second mode. Keep the live path untouched - it is the operator's only unambiguous sign that the mic is open but hearing nothing."
     },
     {

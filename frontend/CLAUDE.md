@@ -83,7 +83,20 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `freeze()`/`unfreeze()` (US-028) pause the `requestAnimationFrame` loop without
   clearing `this.analyser`/`this.data` the way `stop()` does, so the last live frame
   stays on screen instead of settling to the idle baseline — that is what lets a
-  paused take read as "held", not "stopped".
+  paused take read as "held", not "stopped". `renderRecording(samples, segments)`
+  (US-029) draws a **static** peak-envelope waveform of a finished take instead of the
+  live analyser trace, with a vertical marker (`this.markerColor`, the `--warning`
+  token) at each boundary between `segments` — the exact `Recording.segments` shape
+  from `capture.js` (millisecond offsets; a single-segment take draws no markers,
+  since there is no boundary between one span and itself). The pure half,
+  `peakEnvelope(samples, columns)`, is exported and node-testable: it returns one
+  `{min, max}` pair per column rather than an average, so a one-sample transient
+  between two silent samples still shows up instead of being smoothed away. The
+  static drawing **persists**: `render()` redraws from the stored `recordingSamples`
+  on every call (including a resize), and only `start()`/`stop()` clear it back to
+  the live/idle path — never a silent timeout. `Recording.samples` (the decoded
+  `Float32Array` `capture.js`'s `stop()` already computes before encoding) is what
+  feeds this, so the waveform never re-decodes the WAV bytes it just encoded.
 - `playback.js` — `Playback(button, readout, audio)`: play/pause over the recording's own
   `blob`, so the operator hears the exact bytes the backend received. Takes its three DOM
   elements as arguments and never touches `document`, which is what lets node drive it with
