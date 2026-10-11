@@ -20,17 +20,22 @@
         <svg id="tree-canvas" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
       </div>
 
-      <section class="capture-area" aria-label="Capture">
+      <section class="dock" aria-label="Capture">
+        <p class="message" id="capture-message" data-state="error" role="status" hidden></p>
         <div class="record-slot" id="record-slot">
           <button type="button" id="record-button" class="record" aria-pressed="false">
             Record
           </button>
         </div>
-        <p class="message" id="capture-message" data-state="error" role="status" hidden></p>
+        <div class="pause-slot" id="pause-slot">
+          <button type="button" id="pause-button" class="pause" aria-pressed="false" disabled>
+            Pause
+          </button>
+        </div>
+        <p class="timer mono" id="timer" role="timer">0:00 / 0:30</p>
         <div class="waveform" id="waveform-slot">
           <canvas id="waveform-canvas" aria-hidden="true"></canvas>
         </div>
-        <p class="timer mono" id="timer" role="timer">0:00 / 0:30</p>
         <div class="playback" id="playback-slot">
           <button type="button" id="play-button" class="play" aria-pressed="false" disabled>
             Play

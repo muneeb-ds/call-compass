@@ -78,7 +78,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-019, second half. The pause button itself is US-013; leave a styled, disabled placeholder in the slot here so the dock's final geometry is settled before the behaviour lands. Do not change capture.js or timer.js in this story."
     },
     {

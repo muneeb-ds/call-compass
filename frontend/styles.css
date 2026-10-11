@@ -190,16 +190,17 @@ body {
 }
 
 /* Record control. The recording state is carried on `data-recording` so the button's
- * look follows the recorder's actual state rather than a separate CSS class. */
+ * look follows the recorder's actual state rather than a separate CSS class. The dock
+ * itself supplies the surrounding padding (see `.dock`), so this slot adds none - that
+ * is what keeps the dock's total height inside the ~15vh budget the PRD sets. */
 .record-slot {
   display: grid;
   place-items: center;
-  padding: var(--gap);
 }
 
 .record {
-  width: 5.5rem;
-  height: 5.5rem;
+  width: 4.5rem;
+  height: 4.5rem;
   border-radius: var(--radius-full);
   border: 2px solid var(--border);
   background: var(--surface-raised);
@@ -242,13 +243,43 @@ body {
   }
 }
 
-/* Waveform. The canvas is sized entirely by CSS; waveform.js matches its backing
- * store to the laid-out size each frame. */
-.waveform {
-  height: 5rem;
-  padding: var(--gap);
+/* Pause/resume placeholder. US-013 wires the click handler and the paused look; this
+ * story only settles the dock's final geometry, so the control sits disabled, styled
+ * like the other secondary dock buttons (`.play`, `.reset`) rather than looking broken
+ * or unfinished. */
+.pause-slot {
+  display: flex;
+}
+
+.pause {
+  min-width: 4.5rem;
+  padding: var(--space-3) var(--space-7);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pause:disabled {
+  opacity: 0.45;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* Waveform. The canvas is sized entirely by CSS; waveform.js matches its backing
+ * store to the laid-out size each frame. In the old vertical column this stretched to
+ * the column's width for free (flex cross-axis stretch); the dock's row layout has no
+ * such axis to stretch along, so it needs an explicit width, sized to roughly match
+ * the record button's height so neither control alone sets the dock's total height. */
+.waveform {
+  width: 9rem;
+  height: 4.5rem;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-shrink: 0;
 }
 
 .waveform canvas {
@@ -376,10 +407,10 @@ body {
   box-shadow: var(--elevation-2);
 }
 
-/* Capture and trace float over the stage as temporary surfaces; US-004 turns the
- * capture area into the floating dock and US-006 turns the trace area into the
- * slide-over panel. Both keep the same flex-column shape `.column` used to give them. */
-.capture-area,
+/* Capture and trace float over the stage as temporary surfaces; the dock (below) is
+ * the capture area's floating chrome and US-006 turns the trace area into the
+ * slide-over panel. Both keep the same flex-row/column shape `.column` used to give
+ * them. */
 .trace-area {
   position: absolute;
   z-index: 2;
@@ -392,13 +423,31 @@ body {
   box-shadow: var(--elevation-2);
 }
 
-.capture-area {
+/* The capture dock: a single floating horizontal surface over the bottom of the
+ * stage. It is absolutely positioned so it never participates in the stage's layout
+ * or affects the SVG's size - only its own height, capped well under the 15vh ceiling
+ * the PRD sets, changes as its children grow. The translucent, blurred backdrop keeps
+ * the tree below legibly visible through it without the dock itself losing contrast
+ * against a busy graph. */
+.dock {
+  position: absolute;
+  z-index: 2;
   left: 50%;
   bottom: var(--space-8);
-  align-items: center;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: var(--space-6) var(--space-8);
   max-width: calc(100% - var(--space-9) * 2);
+  max-height: 15vh;
   overflow-x: auto;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-3);
 }
 
 .trace-area {
