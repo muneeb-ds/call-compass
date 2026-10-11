@@ -49,7 +49,21 @@
         <p class="outcome" id="outcome-strip" aria-live="polite"></p>
       </section>
 
-      <aside class="trace-area" aria-label="Trace">
+      <aside class="trace-rail" aria-label="Trace rail" id="trace-rail">
+        <button
+          type="button"
+          id="trace-toggle"
+          class="trace-toggle"
+          aria-expanded="false"
+          aria-controls="trace-panel"
+        >
+          Trace
+        </button>
+        <div class="trace-chips" id="trace-chip-list"></div>
+        <p class="trace-chip-total mono" id="trace-chip-total">Total: &mdash;</p>
+      </aside>
+
+      <aside class="trace-panel" aria-label="Trace" id="trace-panel" data-state="collapsed">
         <p class="total mono" id="trace-total">Total: &mdash;</p>
         <div class="trace-list" id="trace-list" role="log" aria-live="polite"></div>
       </aside>

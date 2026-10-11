@@ -124,7 +124,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-020. trace.js's public API is frozen here - the rail is a new sibling view that reads the same step data, not a rewrite of Trace. Existing backend/tests/test_frontend_analysis.py drives Trace under node; keep it passing unchanged."
     },
     {

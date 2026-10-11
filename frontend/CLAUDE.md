@@ -86,7 +86,25 @@ it can be pinned from pytest this way** — that is the only test runner this di
   run (the backend always sends `done` after it), so `onError` fires and the stream resolves
   normally — never treat it as a throw or leave a spinner turning on it. It also records every step's
   `tool_called` in `picks`, which is the outcome strip's breadcrumb — the strip must not
-  re-derive the path from the terminal event's `path` (those are node ids).
+  re-derive the path from the terminal event's `path` (those are node ids). `onStep(step,
+  index)` fires right after `trace.addStep` for the same step, with that step's 0-based
+  arrival index (`picks.length - 1`) — US-006's trace rail is built on this rather than
+  reading `Trace`'s rendered DOM.
+- `trace-panel.js` — the collapsed trace rail and the slide-over panel it opens. `trace.js`'s
+  public API is frozen, so the **panel** is just `index.html` chrome around the exact
+  `trace-total`/`trace-list` elements `Trace` already renders into — no module owns it.
+  `TraceRail(listEl, totalEl, {onSelect})` is the sibling view: it accumulates its own
+  running total from `Analysis.onStep`'s `latency_ms` figures (same arithmetic as `Trace`,
+  deliberately duplicated rather than scraping `Trace`'s text), and `setTotal(ms)` takes the
+  terminal event's authoritative figure the same way `Trace.setTotal` does. `onSelect(index)`
+  fires on a chip click; wiring it to `panel.open()` plus `trace.listEl.children[index]
+  .scrollIntoView()` is what opens the panel scrolled to the matching card.
+  `TracePanel(panelEl, toggleEl, {doc})` owns open/closed as `data-state="open"|"collapsed"`
+  plus the toggle's `aria-expanded`; `doc.addEventListener("keydown", ...)` is how `Escape`
+  closes it, and `doc` is optional so the node harness can drive open/close/toggle without a
+  real `document`. **Neither class is ever touched by `Analysis.reset()`/`resetAll`** — the
+  panel's open state is a viewer preference, not run state, which is what lets it survive a
+  run and a reset; only `app.js`'s `analysis.onReset` clears the rail.
 - `outcome.js` — the outcome strip, in the dock. `breadcrumb(picks)` / `formatEndToEnd(ms)` /
   `formatInferenceCount(n)` / `reasonText(reason, label)` are pure; `OutcomeStrip(container)`
   draws **only** from a terminal event, so an in-flight run can never be read as an answer.
@@ -117,8 +135,10 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `{ recorder, waveform, timer, playback, toggle, reset, latest }`; `onRecording` is **awaited
   inside the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
   traversal without inventing a second flag. `wireAnalysis(loading, {onFinish})` reports a run
-  ending by **any** route through that one hook. `main()` returns
-  `{ analysis, outcome, capture, reset, loading }` — drive those rather than re-querying the DOM.
+  ending by **any** route through that one hook; it also builds the `TraceRail`/`TracePanel`
+  pair and wires `analysis.onStep`/`onReset` to the rail. `main()` returns
+  `{ analysis, outcome, panel, capture, reset, loading }` — drive those rather than
+  re-querying the DOM.
   Teardown is never re-derived: `capture.reset()` and `Analysis.reset()` each own their half,
   and a story that adds UI should clear it from the owning half or from `Analysis.onReset`.
 

@@ -53,6 +53,8 @@ export class Analysis {
     this.onTerminal = null;
     /** @type {((payload: object) => void)|null} */
     this.onError = null;
+    /** @type {((step: object, index: number) => void)|null} called after each step is traced. */
+    this.onStep = null;
     /** @type {(() => void)|null} called by `reset()`, for UI this class does not own. */
     this.onReset = null;
   }
@@ -105,6 +107,9 @@ export class Analysis {
       if (this.view) this.view.annotate(data.node_id, stepDetail(data));
       this.trace.addStep(data);
       this.picks.push(data.tool_called);
+      // The rail is a sibling view over the same step data, not a rewrite of Trace —
+      // it needs the step's own arrival index, which `picks.length` gives for free.
+      if (this.onStep) this.onStep(data, this.picks.length - 1);
       this.lit = data.node_id;
       return;
     }

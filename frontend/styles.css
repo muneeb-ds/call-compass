@@ -407,20 +407,118 @@ body {
   box-shadow: var(--elevation-2);
 }
 
-/* Capture and trace float over the stage as temporary surfaces; the dock (below) is
- * the capture area's floating chrome and US-006 turns the trace area into the
- * slide-over panel. Both keep the same flex-row/column shape `.column` used to give
- * them. */
-.trace-area {
+/* The trace rail: collapsed by default, pinned to the stage's right edge, always
+ * visible regardless of the panel's open state (the panel sits above it in z-order
+ * and slides over it when open). One compact chip per step plus the running total. */
+.trace-rail {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
+  top: var(--space-8);
+  right: var(--space-8);
+  bottom: var(--space-8);
+  width: 3.75rem;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-2);
+}
+
+.trace-toggle {
+  padding: var(--space-3) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.trace-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.trace-chips {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.trace-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-0);
+  padding: var(--space-2) var(--space-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.trace-chip:hover {
+  border-color: var(--accent);
+}
+
+.trace-chip-index {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.trace-chip-latency {
+  font-size: var(--text-2xs);
+}
+
+.trace-chip-total {
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-2xs);
+  color: var(--text-dim);
+}
+
+/* The slide-over panel: the exact `Trace` elements (total + list), unchanged, inside
+ * chrome that slides in from off-stage on the right rather than re-laying-out the
+ * tree. Collapsed by default; `data-state="open"` (set by `TracePanel`) slides it in. */
+.trace-panel {
+  position: absolute;
+  z-index: 4;
+  top: var(--space-8);
+  right: var(--space-8);
+  bottom: var(--space-8);
+  width: 20rem;
+  display: flex;
+  flex-direction: column;
   gap: var(--gap);
   padding: var(--gap);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--elevation-2);
+  box-shadow: var(--elevation-3);
+  transform: translateX(calc(100% + var(--space-8) * 2));
+  transition: transform 220ms ease-out;
+}
+
+.trace-panel[data-state="open"] {
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-panel {
+    transition: none;
+  }
 }
 
 /* The capture dock: a single floating horizontal surface over the bottom of the
@@ -448,16 +546,6 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--elevation-3);
-}
-
-.trace-area {
-  top: var(--space-8);
-  right: var(--space-8);
-  bottom: var(--space-8);
-  width: 20rem;
-  flex-direction: column;
-  min-height: 0;
-  overflow: auto;
 }
 
 .tree-edge {
