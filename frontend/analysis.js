@@ -62,6 +62,8 @@ export class Analysis {
     this.onError = null;
     /** @type {((step: object, index: number) => void)|null} called after each step is traced. */
     this.onStep = null;
+    /** @type {((id: string) => void)|null} called whenever the frontier moves — drives auto-follow. */
+    this.onActivate = null;
     /** @type {(() => void)|null} called by `reset()`, for UI this class does not own. */
     this.onReset = null;
   }
@@ -105,6 +107,7 @@ export class Analysis {
     const node = this.view && this.view.node(id);
     if (node) node.dataset.state = "active";
     this.active = id;
+    if (this.onActivate) this.onActivate(id);
   }
 
   /** Draws the edge between two nodes, if the graph has one. @param {string} from @param {string} to */

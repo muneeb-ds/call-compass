@@ -14,6 +14,7 @@ import { RecordingTimer } from "./timer.js";
 import { Trace } from "./trace.js";
 import { TraceRail, TracePanel } from "./trace-panel.js";
 import { TreeView } from "./tree.js";
+import { frameFor, Viewport } from "./viewport.js";
 import { Waveform } from "./waveform.js";
 
 /** @param {string} text @param {"loading"|"ready"|"error"} state */
@@ -227,13 +228,15 @@ export function wireCapture(hooks = {}) {
  * @param {{onFinish?: () => void}} [hooks] `onFinish` is called once a run has ended by
  *   any route — a terminal event, an `error` event, or a rejected upload — which is
  *   what arms the Reset button. A cancelled run is not a finish and does not call it.
- * @returns {{analysis: Analysis, outcome: OutcomeStrip, panel: TracePanel,
+ * @returns {{analysis: Analysis, outcome: OutcomeStrip, panel: TracePanel, viewport: Viewport,
  *            onRecording: (r: {bytes: Uint8Array}) => Promise<void>}}
  */
 export function wireAnalysis(loading, hooks = {}) {
   const finished = () => {
     if (hooks.onFinish) hooks.onFinish();
   };
+  const svg = /** @type {SVGSVGElement} */ (document.getElementById("tree-canvas"));
+  const viewport = new Viewport(svg);
   const trace = new Trace(
     document.getElementById("trace-total"),
     document.getElementById("trace-list"),
@@ -264,6 +267,15 @@ export function wireAnalysis(loading, hooks = {}) {
   // The panel's open/closed state is a viewer preference, not run state, so neither
   // `onReset` nor `onTerminal` below ever touches `panel` — only the toggle does.
   analysis.onStep = (step, index) => rail.addStep(step, index);
+  // Follows the frontier down the tree as it moves. The stage's own aspect ratio,
+  // read fresh each time, is what keeps the framing correct across a window resize.
+  analysis.onActivate = (id) => {
+    const layout = analysis.view && analysis.view.layout;
+    if (!layout) return;
+    const rect = svg.getBoundingClientRect();
+    const aspect = rect.height > 0 ? rect.width / rect.height : 16 / 9;
+    viewport.goTo(frameFor(layout, id, aspect));
+  };
   // The strip is drawn from the terminal event only, so an in-flight run never shows
   // an outcome; `reset()` (a new run, or US-016's button) takes it away again.
   analysis.onReset = () => {
@@ -310,7 +322,7 @@ export function wireAnalysis(loading, hooks = {}) {
     }
   }
 
-  return { analysis, outcome, panel, onRecording };
+  return { analysis, outcome, panel, viewport, onRecording };
 }
 
 /** Page entry point. Exported so a later story can wire the same parts differently. */
@@ -323,12 +335,12 @@ export function main() {
     /** @type {HTMLButtonElement} */ (document.getElementById("reset-button")),
     () => resetAll({ analysis, capture }),
   );
-  const { analysis, outcome, panel, onRecording } = wireAnalysis(loading, {
+  const { analysis, outcome, panel, viewport, onRecording } = wireAnalysis(loading, {
     onFinish: () => reset.arm(),
   });
   const capture = wireCapture({ onRecording });
   reset.button.addEventListener("click", () => reset.trigger());
-  return { analysis, outcome, panel, capture, reset, loading };
+  return { analysis, outcome, panel, viewport, capture, reset, loading };
 }
 
 main();

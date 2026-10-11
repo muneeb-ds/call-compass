@@ -97,7 +97,10 @@ it can be pinned from pytest this way** — that is the only test runner this di
   every terminal path (`completed`/`unplaced`/`error`) clears `this.active` to `null`
   after flipping the frontier node to `visited`/`warning`. A future story touching the
   frontier should extend `activate()`/the `handle()` branches rather than tracking a
-  second copy of "where the model is" elsewhere.
+  second copy of "where the model is" elsewhere. `onActivate(id)` fires from inside
+  `activate()` itself, so it covers both the root-on-`started` and the
+  `next_node_id`-on-`step` cases for free — `viewport.js`'s auto-follow is built on this
+  rather than a second frontier tracker.
 - `trace-panel.js` — the collapsed trace rail and the slide-over panel it opens. `trace.js`'s
   public API is frozen, so the **panel** is just `index.html` chrome around the exact
   `trace-total`/`trace-list` elements `Trace` already renders into — no module owns it.
@@ -130,6 +133,28 @@ it can be pinned from pytest this way** — that is the only test runner this di
   `STOP_REASONS` is keyed by the exact `StopReason` literals in
   `callcompass/traversal.py` and `test_frontend_outcome.py` pins the two sets equal, so
   **adding a backend stop reason fails here until the UI has a sentence for it**.
+- `viewport.js` — the stage camera. `frameFor(layout, nodeId, aspect, zoom)` is pure: it
+  reads a `layoutTree` result and a node id and returns the `{x, y, width, height}`
+  viewBox that centres that node with its immediate parent row and child row visible,
+  clamped to never pan narrower than a `fitAspect`-matched whole-tree frame — when the
+  3-row window would already be no smaller than the whole tree, the whole tree is framed
+  instead (centred on the tree, not the node), which is what keeps a small operator tree
+  from jittering. It never reads a node's documentary `level` field or recomputes
+  coordinates — `layout.nodes[].level/x/y` from `tree.js` is the only source of depth and
+  position. `Viewport(svg, deps)` is the drawing half: it owns the `<svg>`'s `viewBox`
+  attribute and animates toward whatever frame `goTo(target)` is given, over ~220 ms
+  ease-out, cancelling any animation already in flight; under
+  `prefers-reduced-motion: reduce` (or with no prior box to lerp from) it jumps straight
+  there. The viewBox is animated, never a CSS transform on the `<svg>`, so stroke widths
+  and the node detail text stay at constant screen size through a pan. `deps` (raf/caf/
+  now/reducedMotion) are injectable the same way `waveform.js` injects
+  `getComputedStyle`, purely so a node test could drive the animation loop without a
+  browser — though `test_frontend_viewport.py` only pins `frameFor`, the pure half, the
+  same split `test_frontend_tree.py` makes for `layoutTree` vs `TreeView`. Auto-follow is
+  wired from `Analysis.onActivate(id)` (fired from `activate()` alongside the existing
+  `data-state="active"` flip) in `app.js`'s `wireAnalysis`, reading the stage's live
+  `getBoundingClientRect()` aspect ratio on every call so a window resize is picked up
+  for free on the next frontier move.
 - `reset.js` — the Reset button. `resetAll({analysis, capture})` is the teardown and is
   pure wiring, so its **order** is assertable from node: cancel the in-flight stream
   *before* clearing, or a chunk already in flight repaints a node the tree just dimmed.

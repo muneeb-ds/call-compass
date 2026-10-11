@@ -167,7 +167,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "PRD US-024, first half. Split from the manual pan/zoom controls. layoutTree already returns every node's level and the total `levels`, so read geometry from the layout - never recompute coordinates and never read the config's documentary `level` field. The sample tree is now 26 nodes laid out at roughly 3.2:1 (widest row is 10 nodes, viewBox ~1906x598), so auto-pan genuinely earns its keep and the whole-tree-fits branch is no longer the common case - but still implement and test it, because a smaller operator tree must not jitter."
     },
     {
