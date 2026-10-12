@@ -17,21 +17,61 @@
     </header>
 
     <main class="stage">
-      <section class="dock" id="dock" aria-label="Capture" data-state="idle">
-        <div class="record-slot" id="record-slot">
-          <button type="button" id="record-button" class="record" aria-pressed="false">
-            Record
-          </button>
+      <section class="dock" id="dock" aria-label="Capture" data-state="idle" data-source="mic">
+        <fieldset class="source-switch" id="source-switch">
+          <legend class="visually-hidden">Audio source</legend>
+          <label class="source-option">
+            <input type="radio" name="source" value="mic" checked />
+            <span>Microphone</span>
+          </label>
+          <label class="source-option">
+            <input type="radio" name="source" value="file" />
+            <span>Audio file</span>
+          </label>
+        </fieldset>
+
+        <div class="source-panel source-mic" id="source-mic">
+          <div class="record-slot" id="record-slot">
+            <button type="button" id="record-button" class="record" aria-pressed="false">
+              Record
+            </button>
+          </div>
+          <p class="timer mono" id="timer" role="timer">0:00 / 0:30</p>
+          <div class="pause-slot" id="pause-slot">
+            <button type="button" id="pause-button" class="pause" aria-pressed="false" disabled>
+              Pause
+            </button>
+          </div>
+          <div class="waveform" id="waveform-slot">
+            <canvas id="waveform-canvas" aria-hidden="true"></canvas>
+          </div>
         </div>
-        <div class="pause-slot" id="pause-slot">
-          <button type="button" id="pause-button" class="pause" aria-pressed="false" disabled>
-            Pause
-          </button>
+
+        <div class="source-panel source-file" id="source-file" hidden>
+          <div class="file-pick">
+            <input type="file" id="file-input" class="visually-hidden" accept="audio/*" />
+            <label for="file-input" class="file-choose">Choose file</label>
+            <p class="file-name" id="file-name">or drop one here</p>
+          </div>
+          <div class="clip-track" id="clip-track" data-state="empty">
+            <canvas id="clip-canvas" aria-hidden="true"></canvas>
+            <div class="clip-window" id="clip-window"></div>
+            <div class="clip-playhead" id="clip-playhead" hidden></div>
+          </div>
+          <div class="clip-inputs">
+            <label class="clip-input">
+              <span>Start</span>
+              <input type="range" id="clip-start" min="0" max="0" step="100" value="0" disabled />
+            </label>
+            <label class="clip-input">
+              <span>End</span>
+              <input type="range" id="clip-end" min="0" max="0" step="100" value="0" disabled />
+            </label>
+          </div>
+          <p class="clip-readout mono" id="clip-readout" aria-live="polite">No file chosen</p>
+          <button type="button" id="analyze-button" class="analyze" disabled>Analyze clip</button>
         </div>
-        <p class="timer mono" id="timer" role="timer">0:00 / 0:30</p>
-        <div class="waveform" id="waveform-slot">
-          <canvas id="waveform-canvas" aria-hidden="true"></canvas>
-        </div>
+
         <p class="message" id="capture-message" data-state="error" role="status" hidden></p>
         <div class="playback" id="playback-slot">
           <button type="button" id="play-button" class="play" aria-pressed="false" disabled>

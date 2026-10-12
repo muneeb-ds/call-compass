@@ -8,7 +8,7 @@ every file must be valid in the browser as-is.
 
 ```bash
 node --check frontend/*.js                 # syntax only
-cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,playback,tree,analysis,reset}.py
+cd backend && ../.venv/bin/pytest tests/test_frontend_{audio,timing,clip,playback,tree,analysis,reset}.py
 ```
 
 `tests/test_frontend_audio.py` is the only automated coverage the audio pipeline has: it
@@ -16,6 +16,10 @@ runs the **shipped** `wav.js` and worklet resampler under node (`tests/encode_fi
 and feeds the bytes to the real `decode_wav` and to `POST /api/analyze`. If you change
 either file, run it — a wrong header or rate makes the model answer confidently about
 audio it misheard (PRD risk R-5) rather than erroring.
+
+`tests/test_frontend_clip.py` does the same for `clip.js`: it pins the clip limits to
+`MAX_SECONDS`/`MIN_SECONDS`, exercises every clamp, and feeds encoded clips of a 75 s
+file to the real `decode_wav` and `POST /api/analyze`.
 
 `tests/test_frontend_timing.py` does the same for `timer.js`: it asserts the UI's
 ceiling equals `callcompass.audio.MAX_SECONDS` and that an overshooting auto-stop still
@@ -25,7 +29,8 @@ it can be pinned from pytest this way** — that is the only test runner this di
 ## Module layout
 
 - `wav.js` — the **only** module that knows the audio wire format: `encodeWav(samples,
-  rate)` → `Uint8Array`, plus `concatChunks`, `clampSamples`, `SAMPLE_RATE`, `MAX_SECONDS`.
+  rate)` → `Uint8Array`, plus `concatChunks`, `clampSamples`, `SAMPLE_RATE`, `MAX_SECONDS`,
+  `MIN_SECONDS`.
   Pure: no DOM, no AudioContext, so node can run it. `-1.0` must map to exactly `-32768`
   because the backend divides by 32768. Every format limit the UI needs is re-exported from
   here rather than written out a second time.
@@ -97,6 +102,28 @@ it can be pinned from pytest this way** — that is the only test runner this di
   the live/idle path — never a silent timeout. `Recording.samples` (the decoded
   `Float32Array` `capture.js`'s `stop()` already computes before encoding) is what
   feeds this, so the waveform never re-decodes the WAV bytes it just encoded.
+- `clip.js` — the pure half of the audio-file source. A file can be any length; the
+  clip picked from it is what is sent, and every rule about that clip lives here:
+  `defaultClip`, `setClipStart`/`setClipEnd` (each edge **stops** at the 30 s ceiling and
+  the 0.3 s floor — it never drags the other edge along), `moveClip` (keeps the length,
+  stays in the file), `sliceClip` (trims a rounding overshoot rather than send 30.0001 s),
+  `downmix`, and the `formatClipTime`/`describeClip` readouts. `MAX_CLIP_MS`/`MIN_CLIP_MS`
+  derive from `wav.js`. `clipRecording(samples, clip)` encodes a clip as the **same
+  `Recording` shape** `capture.js` returns for a microphone take, so the analyzer,
+  playback and the waveform never need to know which source a take came from — and
+  playback plays exactly the bytes that will be sent.
+- `audio-file.js` — the drawing half. `decodeAudioFile(file)` decodes any format the
+  browser plays through an `OfflineAudioContext` at 16 kHz (decodeAudioData resamples
+  to its context's rate) and downmixes to mono, once per file; choosing another part of
+  the file never re-decodes it. `AudioFileError` carries the user-facing reason (not
+  audio, or shorter than the minimum). `ClipEditor` draws the whole file with
+  `waveform.js`'s `peakEnvelope` (cached per width), amber inside the clip and dim
+  outside, under a DOM window positioned by percent: pressing the window's body moves
+  it, within 10 px of an edge resizes it, outside it re-centres it there. Two native
+  range inputs mirror the window and give it keyboard control with no `tabindex`.
+  `onCommit` fires once a change is finished (drag released, range `change`) — that is
+  when `app.js` re-encodes the clip; mid-drag only redraws. `setPlayhead(ms)` marks
+  playback's position within the clip.
 - `playback.js` — `Playback(button, readout, audio)`: play/pause over the recording's own
   `blob`, so the operator hears the exact bytes the backend received. Takes its three DOM
   elements as arguments and never touches `document`, which is what lets node drive it with
@@ -263,7 +290,16 @@ it can be pinned from pytest this way** — that is the only test runner this di
   open — after that the panel is the viewer's to toggle, as above. Exports its entry points (`checkHealth`, `loadTree`,
   `wireCapture`, `wireAnalysis`, `main`) so a later story can call them instead of
   re-deriving. `wireCapture({onRecording})` returns
-  `{ recorder, waveform, timer, playback, toggle, reset, latest }`; `onRecording` is **awaited
+  `{ recorder, waveform, timer, playback, clipEditor, toggle, reset, selectSource,
+  loadFile, analyzeFile, source, latest }`. The dock has two sources behind a radio
+  switch (`#dock[data-source]`, `mic`|`file`); only the selected source's panel shows,
+  and `latest()`/playback/the analyzer only ever use **that** source's take. Both
+  sources share `toggle()`'s `busy` flag, and `renderLock()` is the one place that locks
+  the switch, the file input, the clip editor and Analyze while a take or a run is in
+  progress — call it wherever `busy` or `recorder.recording` may have changed. The file
+  source's counterpart to Stop is `analyzeFile()`, which awaits the same `onRecording`.
+  `reset()` clears the microphone take but **keeps** a chosen file and its clip: they
+  are an input, so the operator can rerun it or try another part. `onRecording` is **awaited
   inside the guarded `toggle()`**, which is what keeps the Record button disabled for the whole
   traversal without inventing a second flag. `wireAnalysis(loading, {onFinish})` reports a run
   ending by **any** route through that one hook; it also builds the `TraceRail`/`TracePanel`
@@ -280,7 +316,8 @@ it can be pinned from pytest this way** — that is the only test runner this di
   place the dock's `#dock` `data-state` (`idle`/`recording`/`paused`) and the pause
   button's label/`aria-pressed`/`disabled` are derived from `recorder.recording`/
   `recorder.paused` — call it anywhere either flag might have changed rather than
-  touching the button or the dock directly. The `Space`/`P` shortcuts live in a single
+  touching the button or the dock directly. The `Space`/`P` shortcuts (microphone source
+  only — on the file source they do nothing) live in a single
   `document`-level `keydown` listener inside `wireCapture`, gated by `viewport.js`'s
   exported `isTextInputFocused` (shared rather than reimplemented) and by
   `preventDefault()`, which also suppresses a focused button's own native
