@@ -41,8 +41,10 @@ config/tree.json       the decision tree — the whole sales flow
 scripts/bench_latency.py   the latency measurement behind the figures below
 ```
 
-The UI itself is a thin status bar over three columns: the capture dock on the left (record,
-pause/resume, timer, waveform, playback, reset), the tree you watch the model move through in
+The UI itself is a thin status bar over three columns: the capture dock on the left, which
+takes audio from either the microphone (record, pause/resume, timer, waveform) or an audio
+file (any length; the whole file is shown and you pick a clip of up to 30 s to send), with
+playback and reset shared by both, the tree you watch the model move through in
 the centre, and the trace on the right — a numbered timeline of every step and its latency,
 open by default on wide screens and collapsible to a narrow rail. Below 900px the columns
 stack. There is no separate "result card" — a finished run's outcome shows at the foot of the

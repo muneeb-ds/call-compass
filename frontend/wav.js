@@ -17,6 +17,9 @@ export const SAMPLE_RATE = 16000;
 /** Longest recording the backend accepts, matching audio.py's MAX_SECONDS. */
 export const MAX_SECONDS = 30;
 
+/** Shortest recording the backend accepts, matching audio.py's MIN_SECONDS. */
+export const MIN_SECONDS = 0.3;
+
 const HEADER_BYTES = 44;
 const FORMAT_PCM = 1;
 const CHANNELS = 1;

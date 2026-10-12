@@ -50,7 +50,7 @@ export function peakEnvelope(samples, columns) {
  * @param {string} fallback
  * @returns {string}
  */
-function readColorToken(name, fallback) {
+export function readColorToken(name, fallback) {
   if (typeof getComputedStyle !== "function" || typeof document === "undefined") {
     return fallback;
   }

@@ -5,7 +5,9 @@
 // step — this is loaded directly as an ES module.
 
 import { Analysis } from "./analysis.js";
+import { AudioFileError, ClipEditor, decodeAudioFile } from "./audio-file.js";
 import { MicrophoneError, Recorder } from "./capture.js";
+import { MAX_CLIP_MS, clipRecording, defaultClip, formatClipTime } from "./clip.js";
 import { Playback } from "./playback.js";
 import { OutcomeStrip } from "./outcome.js";
 import { PositionReadout } from "./position.js";
@@ -115,10 +117,15 @@ function setCaptureMessage(text, state = "error") {
 }
 
 /**
- * Wires the Capture column: record/stop button, live waveform, and the 30 s clock.
+ * Wires the Capture column: the source switch, the microphone (record/stop, live
+ * waveform, the 30 s clock) and the audio file (choose, clip, analyze), plus the
+ * playback, message and reset they share.
  *
- * One `toggle()` drives every transition, so the auto-stop at the ceiling takes
- * exactly the same path as a click on Stop.
+ * One `toggle()` drives every Record/Stop transition, so the auto-stop at the ceiling
+ * takes exactly the same path as a click on Stop. The two sources share one `busy`
+ * guard: only the selected source's take is ever played back or analyzed, and nothing
+ * can switch source, record, load a file or start a second run while a take or a run
+ * is in progress.
  *
  * @param {{onRecording?: (recording: import("./capture.js").Recording) => Promise<void>}} [hooks]
  *   `onRecording` is awaited inside the guarded toggle, so the Record button stays
@@ -143,9 +150,150 @@ export function wireCapture(hooks = {}) {
     document.getElementById("playback-time"),
     /** @type {HTMLAudioElement} */ (document.getElementById("playback-audio")),
   );
-  /** @type {import("./capture.js").Recording|null} */
+  const sourceInputs = /** @type {HTMLInputElement[]} */ ([
+    ...document.querySelectorAll('input[name="source"]'),
+  ]);
+  const micPanel = document.getElementById("source-mic");
+  const filePanel = document.getElementById("source-file");
+  const fileInput = /** @type {HTMLInputElement} */ (document.getElementById("file-input"));
+  const fileName = document.getElementById("file-name");
+  const analyzeButton = /** @type {HTMLButtonElement} */ (
+    document.getElementById("analyze-button")
+  );
+  const clipEditor = new ClipEditor(
+    {
+      track: document.getElementById("clip-track"),
+      canvas: /** @type {HTMLCanvasElement} */ (document.getElementById("clip-canvas")),
+      windowEl: document.getElementById("clip-window"),
+      playheadEl: document.getElementById("clip-playhead"),
+      startInput: /** @type {HTMLInputElement} */ (document.getElementById("clip-start")),
+      endInput: /** @type {HTMLInputElement} */ (document.getElementById("clip-end")),
+      readout: document.getElementById("clip-readout"),
+    },
+    { onCommit: (clip) => loadClip(clip) },
+  );
+  /** The microphone's last take. @type {import("./capture.js").Recording|null} */
   let recording = null;
+  /** @type {"mic"|"file"} */
+  let source = "mic";
+  /** @type {import("./audio-file.js").AudioFile|null} */
+  let audioFile = null;
+  /** The file's current clip, encoded. @type {import("./capture.js").Recording|null} */
+  let clipTake = null;
   let busy = false;
+  let playheadFrame = 0;
+
+  /** The take the selected source would send: the only one playback or a run may use. */
+  const currentTake = () => (source === "mic" ? recording : clipTake);
+
+  /**
+   * Locks every control that could change which audio is sent while a take or a run
+   * is in progress, and enables Analyze only when the file source has a clip.
+   */
+  function renderLock() {
+    const locked = busy || recorder.recording;
+    for (const input of sourceInputs) input.disabled = locked;
+    fileInput.disabled = locked;
+    clipEditor.setDisabled(locked);
+    analyzeButton.disabled = locked || !clipTake;
+  }
+
+  /** Shows the selected source's panel and points playback at that source's take. */
+  function renderSource() {
+    dock.dataset.source = source;
+    micPanel.hidden = source !== "mic";
+    filePanel.hidden = source !== "file";
+    for (const input of sourceInputs) input.checked = input.value === source;
+    const take = currentTake();
+    if (take) playback.load(take);
+    else playback.clear();
+    if (source === "file") clipEditor.render();
+    else waveform.render();
+  }
+
+  /** @param {"mic"|"file"} next */
+  function selectSource(next) {
+    if (next === source || busy || recorder.recording) {
+      renderSource();
+      return;
+    }
+    source = next;
+    setCaptureMessage("");
+    renderSource();
+    renderLock();
+  }
+
+  /**
+   * Re-encodes the file's clip — the bytes that will be analyzed — and points
+   * playback at them, so what the operator hears is exactly what will be sent.
+   *
+   * @param {import("./clip.js").Clip} clip
+   */
+  function loadClip(clip) {
+    if (!audioFile) return;
+    clipTake = clipRecording(audioFile.samples, clip);
+    if (source === "file") playback.load(clipTake);
+    renderLock();
+  }
+
+  /** @param {File|undefined} file */
+  async function loadFile(file) {
+    if (!file || busy || recorder.recording || source !== "file") return;
+    busy = true;
+    renderLock();
+    setCaptureMessage(`Reading ${file.name}…`, "info");
+    try {
+      audioFile = await decodeAudioFile(file);
+      fileName.textContent = audioFile.name;
+      clipEditor.load(audioFile, defaultClip(audioFile.durationMs));
+      loadClip(clipEditor.clip);
+      setCaptureMessage(
+        audioFile.durationMs > MAX_CLIP_MS
+          ? `Only the highlighted part is sent, up to 30 s of the ` +
+              `${formatClipTime(audioFile.durationMs)} file. Drag it, or its edges, to choose.`
+          : "",
+        "info",
+      );
+    } catch (err) {
+      setCaptureMessage(
+        err instanceof AudioFileError ? err.message : `Could not open the file: ${err.message}`,
+        "error",
+      );
+    } finally {
+      busy = false;
+      // Lets the same file be chosen again after an error or a different file.
+      fileInput.value = "";
+      renderLock();
+    }
+  }
+
+  /** Sends the file's clip to the analyzer — the file source's counterpart to Stop. */
+  async function analyzeFile() {
+    if (busy || recorder.recording || source !== "file" || !clipTake) return;
+    busy = true;
+    renderLock();
+    playback.audio.pause();
+    try {
+      setCaptureMessage("");
+      if (hooks.onRecording) await hooks.onRecording(clipTake);
+    } catch (err) {
+      setCaptureMessage(`Analysis failed: ${err.message}`, "error");
+    } finally {
+      busy = false;
+      renderLock();
+    }
+  }
+
+  /** Follows playback across the clip on the file's waveform, frame by frame. */
+  function trackPlayhead() {
+    cancelAnimationFrame(playheadFrame);
+    const step = () => {
+      const playing = source === "file" && playback.playing;
+      clipEditor.setPlayhead(playing ? playback.audio.currentTime * 1000 : null);
+      if (playing) playheadFrame = requestAnimationFrame(step);
+    };
+    step();
+  }
 
   /** @param {boolean} isRecording */
   function render(isRecording) {
@@ -225,9 +373,10 @@ export function wireCapture(hooks = {}) {
 
   /** Record <-> Stop. Re-entrant calls are dropped, including a click racing the auto-stop. */
   async function toggle() {
-    if (busy) return;
+    if (busy || source !== "mic") return;
     busy = true;
     button.disabled = true;
+    renderLock();
     try {
       await (recorder.recording ? stop() : start());
     } catch (err) {
@@ -239,6 +388,7 @@ export function wireCapture(hooks = {}) {
     } finally {
       busy = false;
       button.disabled = false;
+      renderLock();
     }
   }
 
@@ -256,19 +406,48 @@ export function wireCapture(hooks = {}) {
     setCaptureMessage("");
     settle();
     timer.reset();
+    // A chosen file and its clip are an input, not a take: they stay, so the operator
+    // can run the same file again or try another part of it.
+    renderSource();
+    renderLock();
   }
 
   button.addEventListener("click", () => void toggle());
   pauseButton.addEventListener("click", () => pauseToggle());
   playback.button.addEventListener("click", () => playback.toggle());
-  // Keeps the trace spanning the column when the window changes size while idle.
-  window.addEventListener("resize", () => waveform.render());
+  for (const input of sourceInputs) {
+    input.addEventListener("change", () => {
+      if (input.checked) selectSource(/** @type {"mic"|"file"} */ (input.value));
+    });
+  }
+  fileInput.addEventListener("change", () => void loadFile(fileInput.files?.[0]));
+  // A file dropped anywhere on the file panel loads the same as one chosen.
+  filePanel.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    filePanel.dataset.drop = "over";
+  });
+  filePanel.addEventListener("dragleave", () => delete filePanel.dataset.drop);
+  filePanel.addEventListener("drop", (event) => {
+    event.preventDefault();
+    delete filePanel.dataset.drop;
+    void loadFile(event.dataTransfer?.files?.[0]);
+  });
+  analyzeButton.addEventListener("click", () => void analyzeFile());
+  for (const name of ["play", "pause", "ended", "seeked"]) {
+    playback.audio.addEventListener(name, () => trackPlayhead());
+  }
+  // Keeps both waveforms spanning the column when the window changes size while idle.
+  window.addEventListener("resize", () => {
+    waveform.render();
+    clipEditor.render();
+  });
   // Global shortcuts: Space mirrors the Record/Stop click, P mirrors Pause/Resume.
   // Both are ignored while a text field has focus, and `preventDefault()` on the
   // keydown also suppresses a focused button's own native space-activation, so a
   // Record/Pause button that happens to have focus does not double-fire.
   document.addEventListener("keydown", (event) => {
     if (isTextInputFocused(document)) return;
+    if (source !== "mic") return;
     if (event.code === "Space") {
       event.preventDefault();
       void toggle();
@@ -282,8 +461,23 @@ export function wireCapture(hooks = {}) {
   renderPause();
   waveform.stop();
   timer.reset();
+  renderSource();
+  renderLock();
   /** Exposed for the later stories that need the captured bytes or the controls. */
-  return { recorder, waveform, timer, playback, toggle, reset, latest: () => recording };
+  return {
+    recorder,
+    waveform,
+    timer,
+    playback,
+    clipEditor,
+    toggle,
+    reset,
+    selectSource,
+    loadFile,
+    analyzeFile,
+    source: () => source,
+    latest: currentTake,
+  };
 }
 
 /**
